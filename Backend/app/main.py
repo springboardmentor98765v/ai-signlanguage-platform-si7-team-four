@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware  # 🌐 CRITICAL FOR FRONTEND
 import time
 import os
 from dotenv import load_dotenv
-from app.routers import auth, course 
+from app.routers import auth, course, practice
 
 # Load persistent environment variables provided by Intern 5 / DevOps
 load_dotenv()
@@ -92,3 +92,4 @@ def health_check():
 
 app.include_router(auth.router)
 app.include_router(course.router)
+app.include_router(practice.router)
