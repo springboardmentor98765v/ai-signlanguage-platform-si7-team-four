@@ -1,0 +1,37 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: signlang-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: signlang
+      POSTGRES_PASSWORD: signlang_dev_pw
+      POSTGRES_DB: signlang_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - signlang_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U signlang -d signlang_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: signlang-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg2://signlang:signlang_dev_pw@postgres:5432/signlang_db
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  signlang_pgdata:
