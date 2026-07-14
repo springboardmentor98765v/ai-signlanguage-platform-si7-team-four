@@ -1,0 +1,10 @@
+opencv-python
+mediapipe
+numpy
+pandas
+Pillow
+scikit-learn==1.6.1
+joblib
+fastapi
+uvicorn
+python-multipart

@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+passlib[bcrypt]
+PyJWT==2.8.0
+pydantic 
+pytest 
+httpx
+pydantic[email]
+bcrypt passlib pyjwt
+python-dotenv
