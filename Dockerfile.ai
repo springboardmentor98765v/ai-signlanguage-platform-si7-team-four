@@ -1,0 +1,29 @@
+FROM python:3.11-slim
+
+WORKDIR /code
+
+# OpenCV / MediaPipe need these system libraries even in a "slim" image.
+# libgles2/libegl1/libgbm1 specifically fix MediaPipe's Tasks API (HandLandmarker),
+# which needs OpenGL ES / EGL bindings even for CPU-only inference.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    libgles2 \
+    libegl1 \
+    libgbm1 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY AIML_CV/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+COPY AIML_CV ./AIML_CV
+
+WORKDIR /code/AIML_CV/api
+
+EXPOSE 8001
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]
