@@ -61,6 +61,8 @@ class PracticeSession(Base):
     user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
     lesson_id = Column(UUID(as_uuid=False), ForeignKey("lessons.id"), nullable=False)
     status = Column(String(20), default="initialized")
+    attempt_count = Column(Integer, default=0)
+    duration_seconds = Column(Float, nullable=True)
     started_at = Column(DateTime, default=datetime.utcnow)
     ended_at = Column(DateTime, nullable=True)
 
