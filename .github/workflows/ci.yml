@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install lint tool
+        run: pip install flake8
+
+      - name: Lint Backend
+        run: flake8 Backend/app --max-line-length=120 --ignore=E501,W503 || true
+
+      - name: Lint Database_Devops
+        run: flake8 Database_Devops/app --max-line-length=120 --ignore=E501,W503 || true
+
+      - name: Lint BD_Logic
+        run: flake8 BD_Logic/app --max-line-length=120 --ignore=E501,W503 || true
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build backend Docker image
+        run: docker build -f Dockerfile.backend -t signlang-backend-ci .
