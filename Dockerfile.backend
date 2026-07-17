@@ -1,0 +1,17 @@
+FROM python:3.11-slim
+
+WORKDIR /code
+
+COPY Backend/requirements.txt ./req-backend.txt
+COPY Database_Devops/requirements.txt ./req-db.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r req-backend.txt -r req-db.txt
+
+COPY Backend/app ./app
+COPY BD_Logic/app/routers ./app/routers
+COPY BD_Logic/app/services ./app/services
+COPY Database_Devops/app/db ./app/db
+
+EXPOSE 8000
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
