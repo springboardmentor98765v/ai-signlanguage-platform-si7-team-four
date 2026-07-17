@@ -23,6 +23,11 @@ class User(Base):
     sessions = relationship("PracticeSession", back_populates="user")
     analytics = relationship("AnalyticsSummary", back_populates="user", uselist=False)
 
+    certificates = relationship("Certificate", back_populates="user")
+    recommendations = relationship("Recommendation", back_populates="user")
+    weekly_analytics = relationship("WeeklyAnalytics", back_populates="user")
+    students_assigned = relationship("InstructorStudent", foreign_keys="InstructorStudent.instructor_id", back_populates="instructor")
+    instructors_assigned = relationship("InstructorStudent", foreign_keys="InstructorStudent.student_id", back_populates="student")
 
 class Course(Base):
     __tablename__ = "courses"
@@ -51,9 +56,11 @@ class Lesson(Base):
     title = Column(String(150), nullable=False)
     description = Column(Text)
     expected_gesture = Column(String(5), nullable=False)
+    category = Column(String(20), nullable=False, default="alphabet")
+    difficulty = Column(String(20), nullable=False, default="easy")
 
     module = relationship("Module", back_populates="lessons")
-
+    recommendations = relationship("Recommendation", back_populates="lesson")
 
 class PracticeSession(Base):
     __tablename__ = "practice_sessions"
@@ -99,3 +106,50 @@ class AnalyticsSummary(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user = relationship("User", back_populates="analytics")
+
+class Certificate(Base):
+    __tablename__ = "certificates"
+    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
+    user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    issued_date = Column(DateTime, default=datetime.utcnow)
+    overall_score = Column(Float, nullable=False)
+    pdf_url = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="certificates")
+
+
+class Recommendation(Base):
+    __tablename__ = "recommendations"
+    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
+    user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    lesson_id = Column(UUID(as_uuid=False), ForeignKey("lessons.id"), nullable=False)
+    reason = Column(String(255), nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="recommendations")
+    lesson = relationship("Lesson", back_populates="recommendations")
+
+
+class InstructorStudent(Base):
+    __tablename__ = "instructor_student"
+    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
+    instructor_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    student_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    assigned_at = Column(DateTime, default=datetime.utcnow)
+
+    instructor = relationship("User", foreign_keys=[instructor_id], back_populates="students_assigned")
+    student = relationship("User", foreign_keys=[student_id], back_populates="instructors_assigned")
+
+
+class WeeklyAnalytics(Base):
+    __tablename__ = "weekly_analytics"
+    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
+    user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    week_start = Column(DateTime, nullable=False)
+    improvement_rate_percentage = Column(Float, nullable=True)
+    weak_letters = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="weekly_analytics")
