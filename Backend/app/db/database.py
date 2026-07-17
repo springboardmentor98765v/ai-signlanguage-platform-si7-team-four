@@ -5,10 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+psycopg2://signlang:signlang_dev_pw@localhost:5432/signlang_db"
-)
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg2://signlang:signlang_dev_pw@localhost:5432/signlang_db")
 
 engine = create_engine(DATABASE_URL, echo=False)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -21,4 +18,3 @@ def get_db():
         yield db
     finally:
         db.close()
-        
