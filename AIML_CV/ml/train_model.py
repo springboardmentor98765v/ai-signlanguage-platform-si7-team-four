@@ -125,4 +125,38 @@ def main():
 
     os.makedirs(ML_DIR, exist_ok=True)
 
-    
+    # Confusion matrix
+    best_preds = best["pipeline"].predict(X_test)
+    cm = confusion_matrix(y_test, best_preds, labels=encoder.transform(encoder.classes_))
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=encoder.classes_)
+    fig, ax = plt.subplots(figsize=(max(8, len(encoder.classes_) * 0.5),
+                                     max(8, len(encoder.classes_) * 0.5)))
+    disp.plot(ax=ax, xticks_rotation="vertical", colorbar=False)
+    plt.title(f"Confusion matrix — {best['name']}")
+    plt.tight_layout()
+    plt.savefig(CONFUSION_MATRIX_OUT)
+    print(f"Confusion matrix saved to {CONFUSION_MATRIX_OUT}")
+
+    per_class_recall = cm.diagonal() / cm.sum(axis=1)
+    weak_letters = sorted(
+        zip(encoder.classes_, per_class_recall), key=lambda x: x[1]
+    )
+    print("\nWeakest letters (lowest recall):")
+    for letter, recall in weak_letters[:5]:
+        print(f"  {letter}: {recall:.2f}")
+
+    joblib.dump({
+        "pipeline": best["pipeline"],
+        "label_encoder": encoder
+    }, MODEL_OUT)
+    print(f"Saved to {MODEL_OUT}")
+
+
+if __name__ == "__main__":
+    main()
+
+    try:
+        from google.colab import files
+        files.download(MODEL_OUT)
+    except ImportError:
+        pass
