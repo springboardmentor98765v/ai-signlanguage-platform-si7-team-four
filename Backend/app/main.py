@@ -4,10 +4,14 @@ from fastapi.middleware.cors import CORSMiddleware  # 🌐 CRITICAL FOR FRONTEND
 import time
 import os
 from dotenv import load_dotenv
-from app.routers import auth, course, practice
+from app.routers import auth, course, practice, analytics, feedback, assessment, recommendation, certificate
+from app.db.database import engine
+from app.models.models import Base
 
 # Load persistent environment variables provided by Intern 5 / DevOps
 load_dotenv()
+
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="AI-Powered Sign Language Platform - Day 7 Production Gateway",
@@ -93,3 +97,8 @@ def health_check():
 app.include_router(auth.router)
 app.include_router(course.router)
 app.include_router(practice.router)
+app.include_router(analytics.router)
+app.include_router(feedback.router)
+app.include_router(assessment.router)
+app.include_router(recommendation.router)
+app.include_router(certificate.router)

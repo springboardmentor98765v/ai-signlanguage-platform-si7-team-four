@@ -61,6 +61,8 @@ class PracticeSession(Base):
     user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
     lesson_id = Column(UUID(as_uuid=False), ForeignKey("lessons.id"), nullable=False)
     status = Column(String(20), default="initialized")
+    attempt_count = Column(Integer, default=0)
+    duration_seconds = Column(Float, nullable=True)
     started_at = Column(DateTime, default=datetime.utcnow)
     ended_at = Column(DateTime, nullable=True)
 
@@ -84,3 +86,16 @@ class Assessment(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     session = relationship("PracticeSession", back_populates="assessments")
+
+
+class AnalyticsSummary(Base):
+    __tablename__ = "analytics_summary"
+    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
+    user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), unique=True, nullable=False)
+    overall_accuracy_percentage = Column(Float, default=0.0)
+    lessons_completed = Column(Integer, default=0)
+    practice_hours = Column(Float, default=0.0)
+    improvement_rate_percentage = Column(Float, default=0.0)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", back_populates="analytics")

@@ -1,5 +1,7 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.orm import Session
 
+from app.db.database import get_db
 from app.services import practice_service
 
 router = APIRouter(
@@ -9,23 +11,28 @@ router = APIRouter(
 
 
 @router.post("/start")
-def start_practice():
+def start_practice(
+    user_id: str,
+    lesson_id: str,
+    db: Session = Depends(get_db)
+):
     """
     Starts a new practice session via the practice service.
-    Session tracking (id, status, attempt count, start time) is handled
-    in app/services/practice_service.py.
     """
-    session = practice_service.start_session()
+    session = practice_service.start_session(db, user_id, lesson_id)
     return session
 
 
 @router.post("/end")
-def end_practice(session_id: str):
+def end_practice(
+    session_id: str,
+    db: Session = Depends(get_db)
+):
     """
     Ends an existing practice session via the practice service.
-    Requires the session_id returned by /practice/start.
     """
-    session = practice_service.end_session(session_id)
+    session = practice_service.end_session(db, session_id)
+
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
