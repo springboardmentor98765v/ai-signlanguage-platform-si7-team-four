@@ -1,4 +1,5 @@
-
+#importing libraries
+import os
 import pandas as pd
 from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
 from sklearn.preprocessing import StandardScaler, LabelEncoder
@@ -6,9 +7,11 @@ from sklearn.pipeline import Pipeline
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, ConfusionMatrixDisplay
+import matplotlib.pyplot as plt
 import joblib
 
+#Directory paths
 try:
     from xgboost import XGBClassifier
     XGBOOST_AVAILABLE = True
@@ -16,11 +19,16 @@ except ImportError:
     XGBOOST_AVAILABLE = False
     print("xgboost not installed — skipping it (pip install xgboost to include)")
 
-WEBCAM_CSV = "dataset.csv"
-KAGGLE_CSV = "kaggle_features.csv"
-MODEL_OUT = "sign_model.joblib"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATASET_RAW_DIR = os.path.join(BASE_DIR, "..", "dataset", "raw")
+ML_DIR = os.path.join(BASE_DIR, "..", "ml")
 
+WEBCAM_CSV = os.path.join(DATASET_RAW_DIR, "dataset.csv")
+KAGGLE_CSV = os.path.join(DATASET_RAW_DIR, "kaggle_features.csv")
+MODEL_OUT = os.path.join(ML_DIR, "sign_model.joblib")
+CONFUSION_MATRIX_OUT = os.path.join(ML_DIR, "confusion_matrix.png")
 
+# model training : model parameter specification
 def load_data():
     frames = []
     for path in [WEBCAM_CSV, KAGGLE_CSV]:
@@ -66,7 +74,7 @@ def build_models():
 
     return models
 
-
+# model comparrision and selection 
 def main():
     df = load_data()
     print("Total samples:", len(df))
@@ -75,8 +83,6 @@ def main():
 
     X = df.drop(columns=["label"])
 
-    # XGBoost needs numeric labels; encode for everyone so comparisons
-    # use the identical target representation
     encoder = LabelEncoder()
     y = encoder.fit_transform(df["label"])
 
@@ -90,8 +96,6 @@ def main():
     for name, pipeline in models.items():
         print(f"--- {name} ---")
 
-        # 5-fold cross-validation for a more stable accuracy estimate
-        # than a single train/test split, useful with a small dataset
         cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
         cv_scores = cross_val_score(pipeline, X_train, y_train, cv=cv, scoring="accuracy")
 
@@ -119,8 +123,28 @@ def main():
     best = results_sorted[0]
     print(f"\nBest model: {best['name']} (test accuracy {best['test_acc']:.4f})")
 
-    # Save the winning pipeline together with the label encoder —
-    # predict.py needs both to turn a feature vector back into a letter
+    os.makedirs(ML_DIR, exist_ok=True)
+
+    # Confusion matrix
+    best_preds = best["pipeline"].predict(X_test)
+    cm = confusion_matrix(y_test, best_preds, labels=encoder.transform(encoder.classes_))
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=encoder.classes_)
+    fig, ax = plt.subplots(figsize=(max(8, len(encoder.classes_) * 0.5),
+                                     max(8, len(encoder.classes_) * 0.5)))
+    disp.plot(ax=ax, xticks_rotation="vertical", colorbar=False)
+    plt.title(f"Confusion matrix — {best['name']}")
+    plt.tight_layout()
+    plt.savefig(CONFUSION_MATRIX_OUT)
+    print(f"Confusion matrix saved to {CONFUSION_MATRIX_OUT}")
+
+    per_class_recall = cm.diagonal() / cm.sum(axis=1)
+    weak_letters = sorted(
+        zip(encoder.classes_, per_class_recall), key=lambda x: x[1]
+    )
+    print("\nWeakest letters (lowest recall):")
+    for letter, recall in weak_letters[:5]:
+        print(f"  {letter}: {recall:.2f}")
+
     joblib.dump({
         "pipeline": best["pipeline"],
         "label_encoder": encoder

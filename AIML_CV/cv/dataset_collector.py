@@ -1,12 +1,15 @@
+#importing libraries
 import cv2
 import csv
 import os
+import string
 
 from camera import Camera
 from hand_detector import HandDetector
 from feature_extractor import FeatureExtractor
 
-LABELS = ["A", "B", "C", "L", "Y"]
+# adding labels for all the 26 letters
+LABELS = list(string.ascii_uppercase)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATASET_DIR = os.path.join(BASE_DIR, "..", "dataset")
@@ -36,6 +39,7 @@ def open_csv_writer(extractor):
 
     return csv_file, writer
 
+# Extraction and saving features in csv file
 
 def main():
     ensure_dataset_dir()
@@ -50,7 +54,7 @@ def main():
     counts = {label: 0 for label in LABELS}
 
     print("Controls:")
-    print(f"  1-{len(LABELS)} : select label ({', '.join(LABELS)})")
+    print("  n/p   : next / previous label")
     print("  c     : capture current frame as a labeled sample")
     print("  q     : quit\n")
 
@@ -65,7 +69,7 @@ def main():
             frame = detector.draw_landmarks(frame, results)
 
             current_label = LABELS[current_label_index]
-            overlay = f"Label: {current_label}  |  Count: {counts[current_label]}  |  1-{len(LABELS)}=select  c=capture  q=quit"
+            overlay = f"Label: {current_label}  |  Count: {counts[current_label]}  |  n/p=switch letter  c=capture  q=quit"
             cv2.putText(
                 frame, overlay, (10, 30),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2
@@ -77,8 +81,11 @@ def main():
             if key == ord('q'):
                 break
 
-            if ord('1') <= key <= ord(str(len(LABELS))):
-                current_label_index = key - ord('1')
+            if key == ord('n'):
+                current_label_index = (current_label_index + 1) % len(LABELS)
+
+            if key == ord('p'):
+                current_label_index = (current_label_index - 1) % len(LABELS)
 
             if key == ord('c'):
                 if results.hand_landmarks:
