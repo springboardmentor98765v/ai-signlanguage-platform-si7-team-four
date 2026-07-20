@@ -1,10 +1,10 @@
-<<<<<<< HEAD
+
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.services import practice_service
-=======
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.db.database import get_db
@@ -14,7 +14,7 @@ from typing import List
 import uuid
 
 router = APIRouter(tags=["Practice Service"])
->>>>>>> da135f1 (changes)
+
 
 # Schema for creating a practice session
 class PracticeStartRequest(BaseModel):
@@ -39,11 +39,11 @@ def start_practice(
     """
     session = practice_service.start_session(db, user_id, lesson_id)
     return session
-=======
+
 class FrameSubmissionRequest(BaseModel):
     session_id: str
     landmarks: List[LandmarkPoint]
->>>>>>> da135f1 (changes)
+
 
 @router.post("/start", status_code=status.HTTP_201_CREATED)
 def start_practice_session(payload: PracticeStartRequest, db: Session = Depends(get_db)):
@@ -53,7 +53,7 @@ def start_practice_session(payload: PracticeStartRequest, db: Session = Depends(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid user_id format.")
 
-<<<<<<< HEAD
+
 @router.post("/end")
 def end_practice(
     session_id: str,
@@ -66,7 +66,7 @@ def end_practice(
 
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
-=======
+
     # 2. Query user and lesson
     user = db.query(models.User).filter(models.User.id == str(user_uuid)).first()
     
@@ -91,7 +91,6 @@ def end_practice(
     db.refresh(new_session)
     
     return {"status": "success", "session_id": str(new_session.id)}
->>>>>>> da135f1 (changes)
 
 @router.post("/submit", status_code=status.HTTP_200_OK)
 def submit_practice_frame(payload: FrameSubmissionRequest, db: Session = Depends(get_db)):

@@ -137,4 +137,8 @@ class InstructorStudent(Base):
     id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
     instructor_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
     student_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+
     assigned_at = Column(DateTime, default=datetime.utcnow)
+
+    
+

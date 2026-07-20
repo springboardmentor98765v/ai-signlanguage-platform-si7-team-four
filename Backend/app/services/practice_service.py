@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 from datetime import datetime
 
 from sqlalchemy.orm import Session
@@ -104,7 +104,7 @@ def get_session(db: Session, session_id: str) -> dict | None:
         "end_time": session.ended_at,
         "duration_seconds": session.duration_seconds,
     }
-=======
+
 from sqlalchemy.orm import Session
 from app.models.models import PracticeSession, Lesson  # Adjust import paths if needed
 
@@ -131,4 +131,4 @@ class PracticeService:
         db.commit()
         db.refresh(new_session)
         return new_session
->>>>>>> da135f1 (changes)
+
