@@ -49,21 +49,11 @@ class Module(Base):
 class Lesson(Base):
     __tablename__ = "lessons"
     id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
-    
-    # --- ADDED SLUG COLUMN FOR STRING IDENTIFIERS ---
     slug = Column(String(100), unique=True, index=True)
-    # ------------------------------------------------
-    
-    # CHANGED: Added nullable=True to allow seeding without existing modules
     module_id = Column(UUID(as_uuid=False), ForeignKey("modules.id"), nullable=True)
-    
     title = Column(String(150), nullable=False)
     description = Column(Text, nullable=True)
-    
-    # CHANGED: Added nullable=True to allow seeding without expected_gesture
     expected_gesture = Column(String(5), nullable=True)
-    
-    # Added Intern 5 layout additions
     category = Column(String(20), nullable=False, default="alphabet")
     difficulty = Column(String(20), nullable=False, default="easy")
 
@@ -115,13 +105,9 @@ class AnalyticsSummary(Base):
     improvement_rate_percentage = Column(Float, default=0.0)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-<<<<<<< HEAD
-    user = relationship("User", back_populates="analytics")
-=======
     user = relationship("User", back_populates="analytics")
 
 
-# --- Added Intern 5 Specific Database Dataset Tables ---
 class WeeklyAnalytics(Base):
     __tablename__ = "weekly_analytics"
     id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
@@ -152,4 +138,3 @@ class InstructorStudent(Base):
     instructor_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
     student_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
     assigned_at = Column(DateTime, default=datetime.utcnow)
->>>>>>> da135f1 (changes)
