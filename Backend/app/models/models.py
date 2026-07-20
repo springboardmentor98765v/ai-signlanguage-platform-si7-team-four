@@ -22,6 +22,8 @@ class User(Base):
 
     sessions = relationship("PracticeSession", back_populates="user")
     analytics = relationship("AnalyticsSummary", back_populates="user", uselist=False)
+    weekly_analytics = relationship("WeeklyAnalytics", back_populates="user")
+    certificates = relationship("Certificate", back_populates="user")
 
 
 class Course(Base):
@@ -47,12 +49,26 @@ class Module(Base):
 class Lesson(Base):
     __tablename__ = "lessons"
     id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
-    module_id = Column(UUID(as_uuid=False), ForeignKey("modules.id"), nullable=False)
+    
+    # --- ADDED SLUG COLUMN FOR STRING IDENTIFIERS ---
+    slug = Column(String(100), unique=True, index=True)
+    # ------------------------------------------------
+    
+    # CHANGED: Added nullable=True to allow seeding without existing modules
+    module_id = Column(UUID(as_uuid=False), ForeignKey("modules.id"), nullable=True)
+    
     title = Column(String(150), nullable=False)
-    description = Column(Text)
-    expected_gesture = Column(String(5), nullable=False)
+    description = Column(Text, nullable=True)
+    
+    # CHANGED: Added nullable=True to allow seeding without expected_gesture
+    expected_gesture = Column(String(5), nullable=True)
+    
+    # Added Intern 5 layout additions
+    category = Column(String(20), nullable=False, default="alphabet")
+    difficulty = Column(String(20), nullable=False, default="easy")
 
     module = relationship("Module", back_populates="lessons")
+    sessions = relationship("PracticeSession", back_populates="lesson")
 
 
 class PracticeSession(Base):
@@ -67,6 +83,7 @@ class PracticeSession(Base):
     ended_at = Column(DateTime, nullable=True)
 
     user = relationship("User", back_populates="sessions")
+    lesson = relationship("Lesson", back_populates="sessions")
     assessments = relationship("Assessment", back_populates="session")
 
 
@@ -98,4 +115,41 @@ class AnalyticsSummary(Base):
     improvement_rate_percentage = Column(Float, default=0.0)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+<<<<<<< HEAD
     user = relationship("User", back_populates="analytics")
+=======
+    user = relationship("User", back_populates="analytics")
+
+
+# --- Added Intern 5 Specific Database Dataset Tables ---
+class WeeklyAnalytics(Base):
+    __tablename__ = "weekly_analytics"
+    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
+    user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    week_start = Column(DateTime, nullable=False)
+    improvement_rate_percentage = Column(Float, nullable=True)
+    weak_letters = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="weekly_analytics")
+
+
+class Certificate(Base):
+    __tablename__ = "certificates"
+    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
+    user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    issued_date = Column(DateTime, nullable=False)
+    overall_score = Column(Float, nullable=False)
+    pdf_url = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="certificates")
+
+
+class InstructorStudent(Base):
+    __tablename__ = "instructor_student"
+    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
+    instructor_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    student_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    assigned_at = Column(DateTime, default=datetime.utcnow)
+>>>>>>> da135f1 (changes)

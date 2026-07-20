@@ -3,26 +3,50 @@ from app.schemas.user import UserRegister, UserLogin
 # Import the new Day 4 security utilities
 from app.utils.security import create_access_token, verify_token_and_role
 import bcrypt
+import uuid
+
+# --- ROUTER & DATABASE IMPORTS ---
+from sqlalchemy.orm import Session
+from app.db.database import get_db
+from app.models.models import User
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
-# Temporary simulated database storage dictionary
+# Temporary simulated database storage dictionary (kept for login path compatibility)
 MOCK_USER_DB = {}
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-def register_user(user_data: UserRegister):
-    if user_data.email in MOCK_USER_DB:
+def register_user(user_data: UserRegister, db: Session = Depends(get_db)):
+    # 1. Check if user already exists in the real database using the imported User model
+    existing_user = db.query(User).filter(User.email == user_data.email).first()
+    if existing_user or user_data.email in MOCK_USER_DB:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email is already registered."
         )
     
+    # 2. Hash the user password safely
     password_bytes = user_data.password.encode('utf-8')
     salt = bcrypt.gensalt()
     hashed_password_bytes = bcrypt.hashpw(password_bytes, salt)
     hashed_password_str = hashed_password_bytes.decode('utf-8')
     
-    new_user_id = f"usr_{len(MOCK_USER_DB) + 1001}"
+    # 3. Create a clean, valid UUID string
+    new_user_id = str(uuid.uuid4())
+    
+    # 4. Save the user to the actual PostgreSQL database table
+    new_db_user = User(
+        id=new_user_id,
+        username=user_data.username,
+        email=user_data.email,
+        password_hash=hashed_password_str,
+        role=user_data.role
+    )
+    db.add(new_db_user)
+    db.commit()
+    db.refresh(new_db_user)
+    
+    # 5. Keep the local mock dictionary synchronized for the login endpoint
     MOCK_USER_DB[user_data.email] = {
         "user_id": new_user_id,
         "username": user_data.username,

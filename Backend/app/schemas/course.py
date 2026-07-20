@@ -19,9 +19,10 @@ class LessonResponse(BaseModel):
 class ModuleCreate(BaseModel):
     title: str
     description: str
+    course_id: str  
 
 class ModuleResponse(BaseModel):
-    module_id: str
+    course_id: str
     title: str
     description: str
     lessons: List[LessonResponse] = []
