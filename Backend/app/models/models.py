@@ -22,6 +22,8 @@ class User(Base):
 
     sessions = relationship("PracticeSession", back_populates="user")
     analytics = relationship("AnalyticsSummary", back_populates="user", uselist=False)
+    weekly_analytics = relationship("WeeklyAnalytics", back_populates="user")
+    certificates = relationship("Certificate", back_populates="user")
 
 
 class Course(Base):
@@ -47,12 +49,16 @@ class Module(Base):
 class Lesson(Base):
     __tablename__ = "lessons"
     id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
-    module_id = Column(UUID(as_uuid=False), ForeignKey("modules.id"), nullable=False)
+    slug = Column(String(100), unique=True, index=True)
+    module_id = Column(UUID(as_uuid=False), ForeignKey("modules.id"), nullable=True)
     title = Column(String(150), nullable=False)
-    description = Column(Text)
-    expected_gesture = Column(String(5), nullable=False)
+    description = Column(Text, nullable=True)
+    expected_gesture = Column(String(5), nullable=True)
+    category = Column(String(20), nullable=False, default="alphabet")
+    difficulty = Column(String(20), nullable=False, default="easy")
 
     module = relationship("Module", back_populates="lessons")
+    sessions = relationship("PracticeSession", back_populates="lesson")
 
 
 class PracticeSession(Base):
@@ -61,10 +67,13 @@ class PracticeSession(Base):
     user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
     lesson_id = Column(UUID(as_uuid=False), ForeignKey("lessons.id"), nullable=False)
     status = Column(String(20), default="initialized")
+    attempt_count = Column(Integer, default=0)
+    duration_seconds = Column(Float, nullable=True)
     started_at = Column(DateTime, default=datetime.utcnow)
     ended_at = Column(DateTime, nullable=True)
 
     user = relationship("User", back_populates="sessions")
+    lesson = relationship("Lesson", back_populates="sessions")
     assessments = relationship("Assessment", back_populates="session")
 
 
@@ -84,3 +93,52 @@ class Assessment(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     session = relationship("PracticeSession", back_populates="assessments")
+
+
+class AnalyticsSummary(Base):
+    __tablename__ = "analytics_summary"
+    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
+    user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), unique=True, nullable=False)
+    overall_accuracy_percentage = Column(Float, default=0.0)
+    lessons_completed = Column(Integer, default=0)
+    practice_hours = Column(Float, default=0.0)
+    improvement_rate_percentage = Column(Float, default=0.0)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", back_populates="analytics")
+
+
+class WeeklyAnalytics(Base):
+    __tablename__ = "weekly_analytics"
+    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
+    user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    week_start = Column(DateTime, nullable=False)
+    improvement_rate_percentage = Column(Float, nullable=True)
+    weak_letters = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="weekly_analytics")
+
+
+class Certificate(Base):
+    __tablename__ = "certificates"
+    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
+    user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    issued_date = Column(DateTime, nullable=False)
+    overall_score = Column(Float, nullable=False)
+    pdf_url = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="certificates")
+
+
+class InstructorStudent(Base):
+    __tablename__ = "instructor_student"
+    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
+    instructor_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    student_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+
+    assigned_at = Column(DateTime, default=datetime.utcnow)
+
+    
+
