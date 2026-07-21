@@ -81,3 +81,24 @@ def get_possible_issue(hand, extractor, target_label):
 
     label = FEATURE_HINTS.get(top_feature, top_feature)
     return f"Your {label} looks off for '{target_label}'"
+
+# Function to feed Intern 4's Feedback Engine
+
+def predict_with_feedback(hand, extractor, target_label=None):
+    """
+    Practice-mode version of predict(): also reports whether the hand
+    matched the letter the person was asked to make, and if not, a hint
+    about what to fix. This is what feeds Intern 4's Feedback Engine.
+
+    Returns (predicted_sign, confidence, correct, possible_issue)
+    correct is None when no target_label is given (open prediction mode).
+    """
+    predicted_sign, confidence = predict(hand, extractor)
+
+    if target_label is None:
+        return predicted_sign, confidence, None, None
+
+    correct = predicted_sign == target_label
+    possible_issue = None if correct else get_possible_issue(hand, extractor, target_label)
+
+    return predicted_sign, confidence, correct, possible_issue
