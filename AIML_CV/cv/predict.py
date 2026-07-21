@@ -46,3 +46,38 @@ def predict(hand, extractor):
     confidence = float(max(probabilities))
 
     return predicted_sign, confidence
+
+# Function to identify the issue
+def get_possible_issue(hand, extractor, target_label):
+    """
+    Compares the current hand against the typical pose for target_label
+    and names the single feature that's most off, in plain language.
+
+    Returns None if the model has no centroid data (old model file), if
+    target_label wasn't a trained class, or if nothing is meaningfully
+    off (deviation below DEVIATION_THRESHOLD).
+    """
+    if not _centroids or target_label not in _centroids:
+        return None
+
+    features = extractor.extract(hand)
+    scaler = _pipeline.named_steps["scale"]
+    scaled = scaler.transform([features])[0]
+
+    feature_names = extractor.get_feature_names()
+    name_to_idx = {name: i for i, name in enumerate(feature_names)}
+    target_centroid = _centroids[target_label]
+
+    deviations = []
+    for name in _interp_names:
+        idx = name_to_idx[name]
+        diff = abs(scaled[idx] - target_centroid[name])
+        deviations.append((name, diff))
+
+    top_feature, top_deviation = max(deviations, key=lambda x: x[1])
+
+    if top_deviation < DEVIATION_THRESHOLD:
+        return None
+
+    label = FEATURE_HINTS.get(top_feature, top_feature)
+    return f"Your {label} looks off for '{target_label}'"
