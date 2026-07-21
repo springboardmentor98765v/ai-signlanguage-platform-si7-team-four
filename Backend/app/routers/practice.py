@@ -27,7 +27,7 @@ class LandmarkPoint(BaseModel):
     y: float
     z: float
 
-<<<<<<< HEAD
+
 @router.post("/start")
 def start_practice(
     user_id: str,
