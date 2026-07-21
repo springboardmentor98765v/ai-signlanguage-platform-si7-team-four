@@ -6,7 +6,12 @@ MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "ml", "sign_model.job
 _saved = joblib.load(MODEL_PATH)
 _pipeline = _saved["pipeline"]
 _label_encoder = _saved["label_encoder"]
+# new labels 
+_centroids = _saved.get("interpretable_centroids")
+_interp_names = _saved.get("interpretable_feature_names")
 
+#Deviation threshold to manage the noisy large standard deviation posing as jitters
+DEVIATION_THRESHOLD = 1.0 
 
 def predict(hand, extractor):
     """
