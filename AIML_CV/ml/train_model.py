@@ -145,6 +145,26 @@ def main():
     for letter, recall in weak_letters[:5]:
         print(f"  {letter}: {recall:.2f}")
 
+    #Adding correction logic
+
+    # Day 7: per-class centroids of the *interpretable* engineered features
+    # (finger angles + fingertip distances) — not the 63 raw landmark
+    # coordinates, which don't translate into a hint a person can act on.
+    # predict.py compares a live hand against the target letter's centroid
+    # to find which specific feature is most "off".
+
+    interpretable_prefixes = ("dist_", "angle_")
+    interpretable_names = [c for c in X.columns if c.startswith(interpretable_prefixes)]
+    interpretable_idx = [X.columns.get_loc(c) for c in interpretable_names]
+
+    scaler = best["pipeline"].named_steps["scale"]
+    X_scaled_all = scaler.transform(X)
+
+    centroids = {}
+    for class_idx, class_label in enumerate(encoder.classes_):
+        rows = X_scaled_all[y == class_idx][:, interpretable_idx]
+        centroids[class_label] = dict(zip(interpretable_names, rows.mean(axis=0)))
+
     joblib.dump({
         "pipeline": best["pipeline"],
         "label_encoder": encoder
