@@ -6,6 +6,7 @@ from app.routers.gesture_router import router as gesture_router
 from app.routers.progress_router import router as progress_router
 from app.routers.translation_history_router import router as translation_history_router
 from app.routers.dictionary_router import router as dictionary_router
+from app.routers.feedback_router import router as feedback_router
 from app.routers import auth, course, practice
 
 app = FastAPI()
@@ -16,6 +17,7 @@ app.include_router(gesture_router)
 app.include_router(progress_router)
 app.include_router(translation_history_router)
 app.include_router(dictionary_router)
+app.include_router(feedback_router)
 app.include_router(auth.router)
 app.include_router(course.router)
 app.include_router(practice.router)
