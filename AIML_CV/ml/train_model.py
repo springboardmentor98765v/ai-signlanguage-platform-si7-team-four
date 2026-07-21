@@ -165,9 +165,12 @@ def main():
         rows = X_scaled_all[y == class_idx][:, interpretable_idx]
         centroids[class_label] = dict(zip(interpretable_names, rows.mean(axis=0)))
 
+    # Centroid logic saved in the model with addition of two new outputs
     joblib.dump({
         "pipeline": best["pipeline"],
-        "label_encoder": encoder
+        "label_encoder": encoder,
+        "interpretable_centroids": centroids,
+        "interpretable_feature_names": interpretable_names
     }, MODEL_OUT)
     print(f"Saved to {MODEL_OUT}")
 
