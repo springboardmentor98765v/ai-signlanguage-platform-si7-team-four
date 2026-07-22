@@ -1,20 +1,5 @@
 """
-Day 8: test the model under different real-world conditions and measure
-prediction speed, logging everything so you have actual numbers for the
-model card instead of a vague impression of "it seemed fine."
-
-How to use:
-  1. Set CONDITION below to describe the current physical setup
-     (e.g. "bright_light", "dim_light", "cluttered_bg", "tilted_hand").
-  2. Run the script. For each letter it asks for, show the sign and
-     press SPACE to capture — same interaction as dataset_collector.py.
-  3. Change CONDITION and re-run for each condition you want to test
-     (at least 2 lighting setups per the checklist, plus background/angle).
-     Every run appends to the same CSV, nothing gets overwritten.
-  4. Run summarize() (or the __main__ block below) once you've collected
-     a few conditions, to get per-condition accuracy/confidence/speed.
-
-Controls: SPACE = capture + predict, N = skip this letter, Q = quit.
+Four conditions = "bright_light", "dim_light", "cluttered_bg", "tilted_hand"
 """
 
 import csv
@@ -28,11 +13,9 @@ from feature_extractor import FeatureExtractor
 from predict import predict_with_feedback
 
 # --- change this every run ---
-CONDITION = "tilted_hand"
+CONDITION = "bright_light"
 
-# A representative subset rather than all 26 — includes the letters that
-# were already weakest in the confusion matrix, plus a few strong ones as
-# a control group. Edit freely.
+# A representative subset rather than all 26 — includes the letters that.
 TEST_LABELS = ["A", "S", "O", "M", "N", "E", "U", "T"]
 
 LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -87,9 +70,6 @@ def run_session():
                     break
 
                 if key == ord(' '):
-                    # Time only the part that matters for "does this feel
-                    # instant" — detection + feature extraction + inference,
-                    # not the UI loop or the keypress wait
                     start = time.perf_counter()
                     results = detector.detect_hands(frame)
 
