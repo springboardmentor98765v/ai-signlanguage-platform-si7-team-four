@@ -28,12 +28,20 @@ KAGGLE_CSV = os.path.join(DATASET_RAW_DIR, "kaggle_features.csv")
 MODEL_OUT = os.path.join(ML_DIR, "sign_model.joblib")
 CONFUSION_MATRIX_OUT = os.path.join(ML_DIR, "confusion_matrix.png")
 
+WEBCAM_TARGET_SHARE = 0.35 
+
 # model training : model parameter specification
 def load_data():
+    sources = {WEBCAM_CSV: "webcam", KAGGLE_CSV: "kaggle"}
     frames = []
-    for path in [WEBCAM_CSV, KAGGLE_CSV]:
+
+    for path, source in sources.items():
         try:
-            frames.append(pd.read_csv(path))
+            frame = pd.read_csv(path)
+            # Clean label whitespace and force string type
+            frame["label"] = frame["label"].astype(str).str.strip()
+            frame["_source"] = source
+            frames.append(frame)
         except FileNotFoundError:
             print(f"Warning: {path} not found, skipping")
 
@@ -41,9 +49,23 @@ def load_data():
         raise RuntimeError("No dataset files found — check your paths")
 
     df = pd.concat(frames, ignore_index=True)
-    df = df.dropna()   # drop any rows with invalid/missing values
-    return df
+    df = df.dropna()
 
+    webcam_df = df[df["_source"] == "webcam"]
+    kaggle_df = df[df["_source"] == "kaggle"]
+
+    if len(webcam_df) > 0 and len(kaggle_df) > 0:
+        factor = (WEBCAM_TARGET_SHARE * len(kaggle_df)) / \
+                 ((1 - WEBCAM_TARGET_SHARE) * len(webcam_df))
+        factor = max(1, round(factor))
+
+        webcam_oversampled = pd.concat([webcam_df] * factor, ignore_index=True)
+        print(f"Oversampling webcam data {factor}x "
+              f"({len(webcam_df)} -> {len(webcam_oversampled)} rows) so it isn't "
+              f"drowned out by {len(kaggle_df)} Kaggle rows")
+        df = pd.concat([webcam_oversampled, kaggle_df], ignore_index=True)
+
+    return df.drop(columns=["_source"])
 
 def build_models():
     models = {
