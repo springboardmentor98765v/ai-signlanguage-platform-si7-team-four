@@ -1,16 +1,4 @@
-"""
-AI Prediction microservice.
-
-Accepts an image (a single webcam frame) and returns the predicted
-sign + confidence, matching the format the Assessment Service expects.
-
-Run from the api/ folder with:
-    uvicorn main:app --reload
-
-Then test at http://127.0.0.1:8000/docs (FastAPI's built-in Swagger UI
-lets you upload a test image directly in the browser).
-"""
-
+#IMPORT libraries 
 import os
 import sys
 from typing import Optional
@@ -21,15 +9,13 @@ from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-# cv/ holds hand_detector.py, feature_extractor.py, predict.py —
-# add it to the import path since this file lives in api/, not cv/
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CV_DIR = os.path.join(BASE_DIR, "..", "cv")
 sys.path.append(CV_DIR)
 
 from hand_detector import HandDetector          # noqa: E402
 from feature_extractor import FeatureExtractor  # noqa: E402
-from predict import predict as predict_sign     # noqa: E402
+from predict import predict_with_feedback     # noqa: E402
 
 
 app = FastAPI(title="Sign Language AI Prediction Service")
@@ -52,6 +38,9 @@ class PredictionResponse(BaseModel):
     predicted_sign: Optional[str]
     confidence: float
     hand_detected: bool
+    # new labels for giving feedback over issue
+    correct: Optional[bool] = None
+    possible_issue: Optional[str] = None
 
 
 @app.get("/health")
@@ -60,7 +49,7 @@ def health():
 
 
 @app.post("/predict", response_model=PredictionResponse)
-async def predict_endpoint(file: UploadFile = File(...)):
+async def predict_endpoint(file: UploadFile = File(...),target_sign: Optional[str] = None):
     contents = await file.read()
     np_arr = np.frombuffer(contents, np.uint8)
     frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
@@ -79,10 +68,13 @@ async def predict_endpoint(file: UploadFile = File(...)):
         )
 
     hand = results.hand_landmarks[0]
-    sign, confidence = predict_sign(hand, extractor)
+    sign, confidence, correct, possible_issue = predict_with_feedback(
+        hand, extractor, target_label=target_sign
+    )
 
     return PredictionResponse(
-        predicted_sign=sign, confidence=confidence, hand_detected=True
+        predicted_sign=sign, confidence=confidence, hand_detected=True,
+        correct=correct, possible_issue=possible_issue
     )
 
 
