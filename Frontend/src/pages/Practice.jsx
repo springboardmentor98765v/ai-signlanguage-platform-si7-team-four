@@ -9,13 +9,17 @@ export default function Practice() {
   const [feedback, setFeedback] = useState(null);
   const [isPracticing, setIsPracticing] = useState(false);
   const [evaluating, setEvaluating] = useState(false);
+  const [timer, setTimer] = useState(0);
+  const [attemptCount, setAttemptCount] = useState(1);
   
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const canvasRef = useRef(document.createElement('canvas'));
 
   useEffect(() => {
+    let interval;
     if (isPracticing) {
+      interval = setInterval(() => setTimer(t => t + 1), 1000);
       const initSession = async () => {
         try {
           const token = localStorage.getItem('access_token');
@@ -32,15 +36,18 @@ export default function Practice() {
           streamRef.current = stream;
         } catch (err) {
           console.error(err);
-          alert('Could not start webcam practice tracking session logs.');
           setIsPracticing(false);
         }
       };
       initSession();
     } else {
+      setTimer(0);
       stopWebcam();
     }
-    return () => stopWebcam();
+    return () => {
+      clearInterval(interval);
+      stopWebcam();
+    };
   }, [isPracticing, lessonId]);
 
   const stopWebcam = () => {
@@ -85,19 +92,22 @@ export default function Practice() {
 
       const evalData = await evalRes.json();
       setFeedback(evalData);
+      setAttemptCount(prev => prev + 1);
     } catch (err) {
       console.error(err);
-      alert('Error connecting to assessment engine algorithms.');
     } finally {
       setEvaluating(false);
     }
   };
 
   return (
-    <div style={{ padding: '40px', maxWidth: '1100px', margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px' }}>
+    <div style={{ padding: '40px', maxWidth: '1100px', margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '40px' }}>
       <div style={{ background: '#fff', padding: '25px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.03)' }}>
         <h2>Active Session: {title}</h2>
-        <p style={{ margin: '10px 0 20px 0' }}>Target Sign Objective: <strong style={{ color: '#2563eb' }}>{expected}</strong></p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px', color: '#64748b', fontSize: '14px' }}>
+          <span>⏱️ Duration: <strong>{timer}s</strong></span>
+          <span>📊 Progress: <strong>Attempt {attemptCount} of 5</strong></span>
+        </div>
         
         <div style={{ width: '100%', height: '340px', background: '#1e293b', borderRadius: '8px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1' }}>
           {isPracticing ? (
@@ -133,6 +143,11 @@ export default function Practice() {
                 <div>• Finger Position Metric: {feedback.metrics?.finger_position_score}%</div>
               </div>
               <p style={{ color: '#0f172a', fontSize: '14px', margin: '5px 0 0 0' }}><strong>AI Suggestions:</strong> {feedback.feedback?.suggestions?.[0]}</p>
+              {feedback.possible_issue && (
+                <div style={{ background: '#fffbe3', borderLeft: '4px solid #f59e0b', padding: '8px', marginTop: '10px', fontSize: '13px' }}>
+                  💡 <strong>Real-time Hint:</strong> {feedback.possible_issue}
+                </div>
+              )}
             </div>
           ) : (
             <p style={{ color: '#64748b', marginTop: '15px' }}>Start your camera capture stream and submit to process image arrays live.</p>

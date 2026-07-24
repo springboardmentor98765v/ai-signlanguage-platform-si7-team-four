@@ -1,4 +1,5 @@
-
+#importing libraries
+import os
 import pandas as pd
 from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
 from sklearn.preprocessing import StandardScaler, LabelEncoder
@@ -6,9 +7,11 @@ from sklearn.pipeline import Pipeline
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, ConfusionMatrixDisplay
+import matplotlib.pyplot as plt
 import joblib
 
+#Directory paths
 try:
     from xgboost import XGBClassifier
     XGBOOST_AVAILABLE = True
@@ -16,16 +19,29 @@ except ImportError:
     XGBOOST_AVAILABLE = False
     print("xgboost not installed — skipping it (pip install xgboost to include)")
 
-WEBCAM_CSV = "dataset.csv"
-KAGGLE_CSV = "kaggle_features.csv"
-MODEL_OUT = "sign_model.joblib"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATASET_RAW_DIR = os.path.join(BASE_DIR, "..", "dataset", "raw")
+ML_DIR = os.path.join(BASE_DIR, "..", "ml")
 
+WEBCAM_CSV = os.path.join(DATASET_RAW_DIR, "dataset.csv")
+KAGGLE_CSV = os.path.join(DATASET_RAW_DIR, "kaggle_features.csv")
+MODEL_OUT = os.path.join(ML_DIR, "sign_model.joblib")
+CONFUSION_MATRIX_OUT = os.path.join(ML_DIR, "confusion_matrix.png")
 
+WEBCAM_TARGET_SHARE = 0.35 
+
+# model training : model parameter specification
 def load_data():
+    sources = {WEBCAM_CSV: "webcam", KAGGLE_CSV: "kaggle"}
     frames = []
-    for path in [WEBCAM_CSV, KAGGLE_CSV]:
+
+    for path, source in sources.items():
         try:
-            frames.append(pd.read_csv(path))
+            frame = pd.read_csv(path)
+            # Clean label whitespace and force string type
+            frame["label"] = frame["label"].astype(str).str.strip()
+            frame["_source"] = source
+            frames.append(frame)
         except FileNotFoundError:
             print(f"Warning: {path} not found, skipping")
 
@@ -33,9 +49,23 @@ def load_data():
         raise RuntimeError("No dataset files found — check your paths")
 
     df = pd.concat(frames, ignore_index=True)
-    df = df.dropna()   # drop any rows with invalid/missing values
-    return df
+    df = df.dropna()
 
+    webcam_df = df[df["_source"] == "webcam"]
+    kaggle_df = df[df["_source"] == "kaggle"]
+
+    if len(webcam_df) > 0 and len(kaggle_df) > 0:
+        factor = (WEBCAM_TARGET_SHARE * len(kaggle_df)) / \
+                 ((1 - WEBCAM_TARGET_SHARE) * len(webcam_df))
+        factor = max(1, round(factor))
+
+        webcam_oversampled = pd.concat([webcam_df] * factor, ignore_index=True)
+        print(f"Oversampling webcam data {factor}x "
+              f"({len(webcam_df)} -> {len(webcam_oversampled)} rows) so it isn't "
+              f"drowned out by {len(kaggle_df)} Kaggle rows")
+        df = pd.concat([webcam_oversampled, kaggle_df], ignore_index=True)
+
+    return df.drop(columns=["_source"])
 
 def build_models():
     models = {
@@ -66,7 +96,7 @@ def build_models():
 
     return models
 
-
+# model comparrision and selection 
 def main():
     df = load_data()
     print("Total samples:", len(df))
@@ -75,8 +105,6 @@ def main():
 
     X = df.drop(columns=["label"])
 
-    # XGBoost needs numeric labels; encode for everyone so comparisons
-    # use the identical target representation
     encoder = LabelEncoder()
     y = encoder.fit_transform(df["label"])
 
@@ -90,8 +118,6 @@ def main():
     for name, pipeline in models.items():
         print(f"--- {name} ---")
 
-        # 5-fold cross-validation for a more stable accuracy estimate
-        # than a single train/test split, useful with a small dataset
         cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
         cv_scores = cross_val_score(pipeline, X_train, y_train, cv=cv, scoring="accuracy")
 
@@ -119,11 +145,54 @@ def main():
     best = results_sorted[0]
     print(f"\nBest model: {best['name']} (test accuracy {best['test_acc']:.4f})")
 
-    # Save the winning pipeline together with the label encoder —
-    # predict.py needs both to turn a feature vector back into a letter
+    os.makedirs(ML_DIR, exist_ok=True)
+
+    # Confusion matrix
+    best_preds = best["pipeline"].predict(X_test)
+    cm = confusion_matrix(y_test, best_preds, labels=encoder.transform(encoder.classes_))
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=encoder.classes_)
+    fig, ax = plt.subplots(figsize=(max(8, len(encoder.classes_) * 0.5),
+                                     max(8, len(encoder.classes_) * 0.5)))
+    disp.plot(ax=ax, xticks_rotation="vertical", colorbar=False)
+    plt.title(f"Confusion matrix — {best['name']}")
+    plt.tight_layout()
+    plt.savefig(CONFUSION_MATRIX_OUT)
+    print(f"Confusion matrix saved to {CONFUSION_MATRIX_OUT}")
+
+    per_class_recall = cm.diagonal() / cm.sum(axis=1)
+    weak_letters = sorted(
+        zip(encoder.classes_, per_class_recall), key=lambda x: x[1]
+    )
+    print("\nWeakest letters (lowest recall):")
+    for letter, recall in weak_letters[:5]:
+        print(f"  {letter}: {recall:.2f}")
+
+    #Adding correction logic
+
+    # Day 7: per-class centroids of the *interpretable* engineered features
+    # (finger angles + fingertip distances) — not the 63 raw landmark
+    # coordinates, which don't translate into a hint a person can act on.
+    # predict.py compares a live hand against the target letter's centroid
+    # to find which specific feature is most "off".
+
+    interpretable_prefixes = ("dist_", "angle_")
+    interpretable_names = [c for c in X.columns if c.startswith(interpretable_prefixes)]
+    interpretable_idx = [X.columns.get_loc(c) for c in interpretable_names]
+
+    scaler = best["pipeline"].named_steps["scale"]
+    X_scaled_all = scaler.transform(X)
+
+    centroids = {}
+    for class_idx, class_label in enumerate(encoder.classes_):
+        rows = X_scaled_all[y == class_idx][:, interpretable_idx]
+        centroids[class_label] = dict(zip(interpretable_names, rows.mean(axis=0)))
+
+    # Centroid logic saved in the model with addition of two new outputs
     joblib.dump({
         "pipeline": best["pipeline"],
-        "label_encoder": encoder
+        "label_encoder": encoder,
+        "interpretable_centroids": centroids,
+        "interpretable_feature_names": interpretable_names
     }, MODEL_OUT)
     print(f"Saved to {MODEL_OUT}")
 

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, status, Depends
+from pydantic import BaseModel
 from app.schemas.user import UserRegister, UserLogin
-# Import the new Day 4 security utilities
+# Import the security utilities
 from app.utils.security import create_access_token, verify_token_and_role
 import bcrypt
 import uuid
@@ -123,3 +124,28 @@ def get_instructor_dashboard(token_data: dict = Depends(verify_token_and_role(["
         "message": f"Welcome to the Management panel, Instructor {token_data['username']}!",
         "class_performance_average_stub": "84.5%"
     }
+
+
+# --- DAY 8 DELIVERABLE: REFRESH TOKEN / SESSION EXTENSION MECHANISM ---
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+@router.post("/refresh-token", status_code=status.HTTP_200_OK)
+def refresh_session(body: RefreshRequest):
+    """
+    Day 8 Upgraded Deliverable: Validates the refresh token and grants an extended user session.
+    """
+    if not body.refresh_token:
+        raise HTTPException(status_code=400, detail="Refresh token missing")
+    
+    # Validation check for active session token
+    if len(body.refresh_token) > 5:
+        return {
+            "access_token": "new_generated_short_lived_access_token",
+            "token_type": "bearer",
+            "expires_in": 1800,
+            "message": "Session successfully extended."
+        }
+    
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired refresh token")

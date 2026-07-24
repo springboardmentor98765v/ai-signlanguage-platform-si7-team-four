@@ -31,6 +31,19 @@ class LandmarkPoint(BaseModel):
     y: float
     z: float
 
+
+@router.post("/start")
+def start_practice(
+    user_id: str,
+    lesson_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Starts a new practice session via the practice service.
+    """
+    session = practice_service.start_session(db, user_id, lesson_id)
+    return session
+
 class FrameSubmissionRequest(BaseModel):
     session_id: str
     landmarks: List[LandmarkPoint]

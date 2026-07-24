@@ -1,117 +1,61 @@
-from fastapi import FastAPI, Request, status
-from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware  # 🌐 CRITICAL FOR FRONTEND INTEGRATION
-
-import time
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 import os
 from dotenv import load_dotenv
-from app.routers import auth, course, practice, analytics, feedback, assessment, recommendation, certificate
-from app.db.database import engine
-from app.models.models import Base
 
-# Load persistent environment variables provided by Intern 5 / DevOps
 load_dotenv()
 
-Base.metadata.create_all(bind=engine)
+SECRET_KEY = os.getenv("SECRET_KEY", "fallback_secret_key")
+
+# Import all your routers (including Day 9 integration)
+from app.routers.profile_router import router as profile_router
+from app.routers.gesture_router import router as gesture_router
+from app.routers.progress_router import router as progress_router
+from app.routers.translation_history_router import router as translation_history_router
+from app.routers.dictionary_router import router as dictionary_router
+from app.routers.feedback_router import router as feedback_router
+from app.routers.integration_router import router as integration_router
+from app.routers import auth, course, practice
 
 app = FastAPI(
-    title="AI-Powered Sign Language Platform - Day 7 Production Gateway",
-    description="Backend Gateway Layer fully integrated with Frontend clients and persistent Database engines.",
-    version="1.7.0"
+    title="AI Sign Language Platform API",
+    description="Final Production-Frozen API documentation for cross-team integration (Frontend, AI, and Business Logic).",
+    version="1.0.0"
 )
-
-# 🌐 --- DAY 7 CROSS-ORIGIN INTEGRATION REQ (Intern 1) ---
-# Allows your Frontend developer's local or deployed URLs to hit your endpoints securely
-origins = [
-    "http://localhost:3000",      # Default React local development port
-    "http://127.0.0.1:3000",
-    "http://localhost:5173",      # Default Vite / Vue local development port
-    "*",                          # Wildcard fallback for internal network debugging sessions
-]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],        # Allows GET, POST, PUT, DELETE, OPTIONS
-    allow_headers=["*"],        # Allows Authorization headers, Content-Type, etc.
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# --- DAY 6 MEMORY STORAGE SUITE ---
-
-IP_REQUEST_LOGS = {}
-RATE_LIMIT_WINDOW_SECONDS = 10
-MAX_REQUESTS_PER_WINDOW = 5
-
-@app.middleware("http")
-async def gateway_security_and_logging_middleware(request: Request, call_next):
-    client_ip = request.client.host if request.client else "unknown_source"
-    current_time = time.time()
-
-    if client_ip not in IP_REQUEST_LOGS:
-        IP_REQUEST_LOGS[client_ip] = []
-
-    IP_REQUEST_LOGS[client_ip] = [
-        timestamp for timestamp in IP_REQUEST_LOGS[client_ip]
-        if current_time - timestamp < RATE_LIMIT_WINDOW_SECONDS
-    ]
-
-    if len(IP_REQUEST_LOGS[client_ip]) >= MAX_REQUESTS_PER_WINDOW:
-        print(f"🔴 [RATE LIMIT] IP {client_ip} throttled.")
-        return JSONResponse(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            content={"detail": "Rate limit exceeded. Maximum 5 requests allowed every 10 seconds."}
-        )
-
-    IP_REQUEST_LOGS[client_ip].append(current_time)
-
-    start_time = time.time()
-    print(f"\n❌ [GATEWAY LOG] Incoming {request.method} request to: '{request.url.path}' | Client: {client_ip}")
-
-    response = await call_next(request)
-
-    process_time_ms = round((time.time() - start_time) * 1000, 2)
-    print(f"✅ [GATEWAY LOG] Outgoing Response Status: {response.status_code} | Latency: {process_time_ms}ms")
-
-    return response
-
-
-# 🗄️ --- DAY 7 PERSISTENT DATABASE CONNECTIONS (Intern 5) ---
-
-# Replace your hardcoded stub with a dynamic environment loader from your teammate's configurations
-REAL_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./sign_language_production.db")
-
-
-@app.get("/")
-def read_root():
-    return {
-        "message": "Welcome to the AI Sign Language Platform Backend Gateway Layer!",
-        "status": "Production-Ready",
-        "milestone_tracker": "Day 7 Integration Architecture Verified"
-    }
-
-
-@app.get("/health")
-
-# Clean Health Check
-@app.get("/health", tags=["Health"])
-def health_check():
-    return {"status": "healthy"}
-
-# Include routers without overriding tags (Fixes duplicates and long URLs)
+# Register all project routers
+app.include_router(profile_router)
+app.include_router(gesture_router)
+app.include_router(progress_router)
+app.include_router(translation_history_router)
+app.include_router(dictionary_router)
+app.include_router(feedback_router)
+app.include_router(integration_router)
 app.include_router(auth.router)
-
 app.include_router(course.router)
 app.include_router(practice.router)
-app.include_router(analytics.router)
-app.include_router(feedback.router)
-app.include_router(assessment.router)
-app.include_router(recommendation.router)
-app.include_router(certificate.router)
 
 app.include_router(course.router, prefix="/courses")
-app.include_router(practice.router, prefix="/practice")  # FIXED: Added prefix here
+app.include_router(practice.router, prefix="/practice")
 
-@app.get("/", tags=["default"])
+@app.get("/health", tags=["System Health & Status"])
+def health_check():
+    """
+    Final health check endpoint to confirm backend container and environment variables are active.
+    """
+    return {"status": "healthy", "env_loaded": bool(SECRET_KEY), "api_status": "frozen_production_ready"}
+
+@app.get("/", tags=["System Health & Status"])
 def read_root():
-    return {"message": "Welcome to the Sign Language Platform API"}
+    """
+    Root endpoint verifying platform launch status.
+    """
+    return {"message": "Welcome to the Sign Language Platform API - Final Production Release"}
