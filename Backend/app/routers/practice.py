@@ -13,6 +13,10 @@ from pydantic import BaseModel
 from typing import List
 import uuid
 
+import requests
+import base64
+from io import BytesIO
+
 router = APIRouter(tags=["Practice Service"])
 
 
@@ -27,23 +31,9 @@ class LandmarkPoint(BaseModel):
     y: float
     z: float
 
-<<<<<<< HEAD
-@router.post("/start")
-def start_practice(
-    user_id: str,
-    lesson_id: str,
-    db: Session = Depends(get_db)
-):
-    """
-    Starts a new practice session via the practice service.
-    """
-    session = practice_service.start_session(db, user_id, lesson_id)
-    return session
-
 class FrameSubmissionRequest(BaseModel):
     session_id: str
     landmarks: List[LandmarkPoint]
-
 
 @router.post("/start", status_code=status.HTTP_201_CREATED)
 def start_practice_session(payload: PracticeStartRequest, db: Session = Depends(get_db)):
@@ -52,7 +42,6 @@ def start_practice_session(payload: PracticeStartRequest, db: Session = Depends(
         user_uuid = uuid.UUID(payload.user_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid user_id format.")
-
 
 @router.post("/end")
 def end_practice(
