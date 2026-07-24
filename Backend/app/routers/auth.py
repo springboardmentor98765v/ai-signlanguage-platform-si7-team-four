@@ -1,10 +1,21 @@
+import os
+from dotenv import load
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
 from app.schemas.user import UserRegister, UserLogin
-# Import the security utilities
-from app.utils.security import create_access_token, verify_token_and_role
+# Import security utilities and shared secrets directly from security.py to avoid key mismatches
+from app.utils.security import create_access_token, create_refresh_token, verify_token_and_role, JWT_SECRET, JWT_ALGORITHM
 import bcrypt
 import uuid
+import jwt 
+
+# --- LOAD ENVIRONMENT VARIABLES ---
+load_dotenv()
+
+# Synchronize keys with security.py
+SECRET_KEY = JWT_SECRET
+ALGORITHM = JWT_ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 
 # --- ROUTER & DATABASE IMPORTS ---
 from sqlalchemy.orm import Session
@@ -23,7 +34,7 @@ def register_user(user_data: UserRegister, db: Session = Depends(get_db)):
     if existing_user or user_data.email in MOCK_USER_DB:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email is already registered."
+            detail="User account already exists with this email."
         )
     
     # 2. Hash the user password safely
@@ -57,48 +68,67 @@ def register_user(user_data: UserRegister, db: Session = Depends(get_db)):
     }
     
     return {
-        "message": "User account created successfully.",
+        "message": "User registered successfully.",
         "user_id": new_user_id,
         "role": user_data.role
     }
 
 @router.post("/login", status_code=status.HTTP_200_OK)
-def login_user(login_data: UserLogin):
+def login_user(login_data: UserLogin, db: Session = Depends(get_db)):
     """
-    Day 4 Upgraded Deliverable: Validates credentials and returns a cryptographic JWT token badge.
+    Day 4 Upgraded Deliverable: Validates credentials and returns cryptographic access & refresh tokens.
     """
-    user = MOCK_USER_DB.get(login_data.email)
-    if not user:
+    # Fallback to check real database if MOCK_USER_DB was wiped on server restart
+    user_record = MOCK_USER_DB.get(login_data.email)
+    
+    if not user_record:
+        db_user = db.query(User).filter(User.email == login_data.email).first()
+        if db_user:
+            # Re-sync into mock dict dynamically so login succeeds
+            MOCK_USER_DB[db_user.email] = {
+                "user_id": str(db_user.id),
+                "username": db_user.username,
+                "email": db_user.email,
+                "password": db_user.password_hash,
+                "role": db_user.role
+            }
+            user_record = MOCK_USER_DB.get(login_data.email)
+
+    if not user_record:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid email or password credentials."
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password provided."
         )
     
     provided_password_bytes = login_data.password.encode('utf-8')
-    stored_hash_bytes = user["password"].encode('utf-8')
+    stored_hash_bytes = user_record["password"].encode('utf-8')
     
     if not bcrypt.checkpw(provided_password_bytes, stored_hash_bytes):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid email or password credentials."
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password provided."
         )
     
-    # --- DAY 4: Generate JWT token containing the user identity & role payload ---
+    # --- Generate token payload containing user identity & role ---
     token_payload = {
-        "user_id": user["user_id"],
-        "username": user["username"],
-        "role": user["role"]
+        "user_id": user_record["user_id"],
+        "username": user_record["username"],
+        "role": user_record["role"]
     }
-    token = create_access_token(data=token_payload)
+    
+    # Generate both short-lived access token and long-lived refresh token
+    access_token = create_access_token(data=token_payload)
+    refresh_token = create_refresh_token(data=token_payload)
         
     return {
         "message": "Login successful.",
-        "access_token": token,
+        "access_token": access_token,
+        "refresh_token": refresh_token,
         "token_type": "bearer",
         "user": {
-            "user_id": user["user_id"],
-            "username": user["username"],
-            "role": user["role"]
+            "user_id": user_record["user_id"],
+            "username": user_record["username"],
+            "role": user_record["role"]
         }
     }
 
@@ -134,18 +164,53 @@ class RefreshRequest(BaseModel):
 @router.post("/refresh-token", status_code=status.HTTP_200_OK)
 def refresh_session(body: RefreshRequest):
     """
-    Day 8 Upgraded Deliverable: Validates the refresh token and grants an extended user session.
+    Day 8 Upgraded Deliverable: Validates the real refresh token and issues a fresh short-lived access token.
     """
     if not body.refresh_token:
-        raise HTTPException(status_code=400, detail="Refresh token missing")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="Refresh token is missing."
+        )
     
-    # Validation check for active session token
-    if len(body.refresh_token) > 5:
+    try:
+        # Decode and verify the refresh token using the synchronized key and algorithm
+        payload = jwt.decode(body.refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("user_id")
+        username: str = payload.get("username")
+        role: str = payload.get("role")
+        
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, 
+                detail="Invalid refresh token payload."
+            )
+        
+        # Create a brand new short-lived access token
+        new_token_payload = {
+            "user_id": user_id,
+            "username": username,
+            "role": role
+        }
+        new_access_token = create_access_token(data=new_token_payload)
+        
         return {
-            "access_token": "new_generated_short_lived_access_token",
+            "access_token": new_access_token,
             "token_type": "bearer",
-            "expires_in": 1800,
             "message": "Session successfully extended."
         }
-    
-    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired refresh token")
+        
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, 
+            detail="Refresh token has expired. Please log in again."
+        )
+    except jwt.InvalidTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, 
+            detail="Invalid or malformed refresh token provided."
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Authentication failed: {str(e)}"
+        )
