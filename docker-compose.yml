@@ -24,7 +24,10 @@ services:
     container_name: signlang-backend
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql+psycopg2://signlang:signlang_dev_pw@postgres:5432/signlang_db
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://signlang:signlang_dev_pw@postgres:5432/signlang_db}
+      EMAIL_HOST: ${EMAIL_HOST:-smtp.gmail.com}
+      EMAIL_APP_PASSWORD: ${EMAIL_APP_PASSWORD:-}
+      PDF_OUTPUT_DIR: ${PDF_OUTPUT_DIR:-/app/certificates}
     ports:
       - "8000:8000"
     depends_on:
