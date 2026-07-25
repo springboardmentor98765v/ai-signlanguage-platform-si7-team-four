@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+passlib[bcrypt]
+PyJWT==2.8.0
+pydantic 
+pytest 
+httpx
+pydantic[email]
+python-dotenv
+python-jose[cryptography]
+python-multipart
