@@ -9,13 +9,11 @@ router = APIRouter(
 
 
 @router.post("/start")
-def start_practice():
+def start_practice(user_id: str, lesson_id: str):
     """
     Starts a new practice session via the practice service.
-    Session tracking (id, status, attempt count, start time) is handled
-    in app/services/practice_service.py.
     """
-    session = practice_service.start_session()
+    session = practice_service.start_session(user_id, lesson_id)
     return session
 
 
@@ -23,9 +21,9 @@ def start_practice():
 def end_practice(session_id: str):
     """
     Ends an existing practice session via the practice service.
-    Requires the session_id returned by /practice/start.
     """
     session = practice_service.end_session(session_id)
+
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
