@@ -1,5 +1,5 @@
 import os
-from dotenv import load
+from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
 from app.schemas.user import UserRegister, UserLogin

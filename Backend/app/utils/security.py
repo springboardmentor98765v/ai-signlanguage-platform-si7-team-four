@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import jwt
 import os
-from dotenv import load
+from dotenv import load_dotenv
 from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
