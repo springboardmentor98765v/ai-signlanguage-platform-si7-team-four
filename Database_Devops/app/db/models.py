@@ -52,6 +52,7 @@ class Module(Base):
 class Lesson(Base):
     __tablename__ = "lessons"
     id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
+    slug = Column(String(100), unique=True, nullable=True)
     module_id = Column(UUID(as_uuid=False), ForeignKey("modules.id"), nullable=False)
     title = Column(String(150), nullable=False)
     description = Column(Text)
