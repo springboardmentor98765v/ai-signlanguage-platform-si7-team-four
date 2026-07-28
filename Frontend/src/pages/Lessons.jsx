@@ -2,28 +2,50 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 export default function Lessons() {
-  const navigate = useNavigate();
-  const [courseData, setCourseData] = useState(null);
+  const [lessons, setLessons] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchLessons = async () => {
-      try {
-        const token = localStorage.getItem('access_token');
-        const response = await fetch('http://localhost:8000/api/courses/crs_beginner_01', {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
+      setLoading(true);
+      setError(null);
+      
+      const token = localStorage.getItem('access_token');
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(token && { 'Authorization': `Bearer ${token}` })
+      };
 
-        if (!response.ok) throw new Error('Could not synchronize system curriculum items.');
-        const data = await response.json();
-        setCourseData(data);
+      try {
+        // Primary Attempt: Try fetching directly from http://localhost:8000/lessons
+        let res = await fetch('http://localhost:8000/lessons', { headers });
+
+        // Fallback Attempt: If 404, try http://localhost:8000/api/lessons
+        if (res.status === 404) {
+          res = await fetch('http://localhost:8000/api/lessons', { headers });
+        }
+
+        if (!res.ok) {
+          throw new Error(`Server returned HTTP status ${res.status}`);
+        }
+
+        const data = await res.json();
+        
+        // Handle array response or nested object responses like { lessons: [...] }
+        const lessonList = Array.isArray(data) ? data : (data.lessons || []);
+        
+        if (lessonList.length > 0) {
+          setLessons(lessonList);
+        } else {
+          // Default curriculum items if backend database table is currently empty
+          setLessons(getFallbackLessons());
+        }
       } catch (err) {
-        setError(err.message);
+        console.warn('Backend fetch failed, loading default local curriculum:', err.message);
+        setError('Connected in offline/demo mode. Displaying default curriculum.');
+        setLessons(getFallbackLessons());
       } finally {
         setLoading(false);
       }
@@ -32,35 +54,76 @@ export default function Lessons() {
     fetchLessons();
   }, []);
 
-  if (loading) return <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>Synchronizing available modules...</div>;
-  if (error) return <div style={{ padding: '40px', color: '#ef4444', textAlign: 'center' }}>⚠️ Network Error: {error}</div>;
+  // Fallback curriculum items to prevent blank screens when FastAPI is offline
+  const getFallbackLessons = () => [
+    { lesson_id: 'les_letter_a', title: "Alphabet 'A'", level: 'Beginner', description: 'Master hand positioning for the letter A.', expected: 'A' },
+    { lesson_id: 'les_letter_b', title: "Alphabet 'B'", level: 'Beginner', description: 'Master finger extension for the letter B.', expected: 'B' },
+    { lesson_id: 'les_letter_c', title: "Alphabet 'C'", level: 'Intermediate', description: 'Practice curved hand shapes for the letter C.', expected: 'C' },
+  ];
+
+  const handleStartPractice = (lesson) => {
+    navigate('/practice', {
+      state: {
+        lessonId: lesson.lesson_id || lesson.id,
+        title: lesson.title || lesson.name,
+        expected: lesson.expected || lesson.title?.split("'")[1] || 'A'
+      }
+    });
+  };
+
+  if (loading) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
+        <h3>⌛ Loading Curriculum from Backend...</h3>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ padding: '40px', maxWidth: '900px', margin: '0 auto' }}>
-      <h1 style={{ textAlign: 'center', marginBottom: '10px', color: '#0f172a' }}>📚 {courseData?.title}</h1>
-      <p style={{ textAlign: 'center', color: '#64748b', marginBottom: '30px' }}>Level: {courseData?.level}</p>
-      
-      {courseData?.modules?.map((mod) => (
-        <div key={mod.module_id} style={{ marginBottom: '40px' }}>
-          <h2 style={{ borderBottom: '2px solid #e2e8f0', paddingBottom: '8px', marginBottom: '20px', color: '#1e293b' }}>{mod.module_name}</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            {mod.lessons?.map((les) => (
-              <div key={les.lesson_id} style={{ padding: '25px', background: '#fff', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.03)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <h3 style={{ margin: '0 0 8px 0', color: '#1e293b' }}>{les.title}</h3>
-                  <p style={{ margin: 0, fontSize: '14px', color: '#64748b' }}>{les.description}</p>
-                </div>
-                <button 
-                  onClick={() => navigate('/practice', { state: { lessonId: les.lesson_id, title: les.title, expected: les.expected_gesture } })} 
-                  style={{ background: '#10b981', color: '#fff', border: 'none', padding: '12px 20px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
-                >
-                  Practice
-                </button>
-              </div>
-            ))}
-          </div>
+    <div style={{ padding: '40px', maxWidth: '1000px', margin: '0 auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <div>
+          <h1 style={{ color: '#0f172a', margin: 0 }}>Sign Language Curriculum 📚</h1>
+          <p style={{ color: '#64748b', margin: '4px 0 0 0' }}>Select a lesson to begin real-time camera practice and gesture analysis.</p>
         </div>
-      ))}
+      </div>
+
+      {error && (
+        <div style={{ background: '#fffbe3', borderLeft: '4px solid #f59e0b', color: '#b45309', padding: '12px 16px', borderRadius: '6px', marginBottom: '24px', fontSize: '14px' }}>
+          ⚠️ {error}
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
+        {lessons.map((lesson, idx) => (
+          <div 
+            key={lesson.lesson_id || lesson.id || idx}
+            style={{ background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}
+          >
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 'bold', padding: '4px 8px', borderRadius: '4px', background: '#e0f2fe', color: '#0369a1' }}>
+                  {lesson.level || 'Standard'}
+                </span>
+                <span style={{ fontSize: '12px', color: '#94a3b8' }}>
+                  ID: {lesson.lesson_id || lesson.id}
+                </span>
+              </div>
+              <h3 style={{ color: '#0f172a', margin: '0 0 8px 0' }}>{lesson.title || lesson.name}</h3>
+              <p style={{ color: '#64748b', fontSize: '14px', margin: '0 0 20px 0', lineHeight: '1.5' }}>
+                {lesson.description || 'Practice gesture recognition and accuracy.'}
+              </p>
+            </div>
+
+            <button
+              onClick={() => handleStartPractice(lesson)}
+              style={{ width: '100%', background: '#2563eb', color: '#fff', border: 'none', padding: '12px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', transition: 'background 0.2s' }}
+            >
+              ▶️ Start Practice
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
