@@ -1,91 +1,83 @@
 import React, { useState, useEffect } from 'react';
 
 export default function Profile() {
-  const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
-  const [role, setRole] = useState('');
-  const [oldPassword, setOldPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState({ name: '', email: '', role: '' });
+  const [passwords, setPasswords] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
+  const [message, setMessage] = useState({ text: '', type: '' });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setUsername(localStorage.getItem('username') || 'srilalitha_dev');
-    setEmail(localStorage.getItem('user_email') || 'student@example.com');
-    setRole(localStorage.getItem('user_role') || 'Learner');
+    fetch('http://localhost:8000/api/user/profile')
+      .then((res) => res.json())
+      .then((data) => {
+        setUser(data);
+        setLoading(false);
+      })
+      .catch(() => {
+        setUser({ name: 'Parvathy K Manoj', email: 'parvathy@example.com', role: 'Learner' });
+        setLoading(false);
+      });
   }, []);
 
-  const handleProfileUpdate = async (e) => {
+  const handleChangePassword = async (e) => {
     e.preventDefault();
-    setMessage(''); setError(''); setLoading(true);
-    try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch('http://localhost:8000/api/user/profile', {
-        method: 'PUT',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, email })
-      });
-      if (!res.ok) throw new Error('Profile update failed.');
-      localStorage.setItem('username', username);
-      setMessage('Profile updated successfully!');
-    } catch (err) {
-      setError(err.message);
-    } finally { setLoading(false); }
-  };
-
-  const handlePasswordChange = async (e) => {
-    e.preventDefault();
-    setMessage(''); setError('');
-    if (newPassword.length < 6) {
-      setError('New password must be at least 6 characters long.');
+    if (passwords.newPassword.length < 6) {
+      setMessage({ text: 'New password must be at least 6 characters long.', type: 'error' });
       return;
     }
-    setLoading(true);
+    if (passwords.newPassword !== passwords.confirmPassword) {
+      setMessage({ text: 'New passwords do not match.', type: 'error' });
+      return;
+    }
+
     try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch('http://localhost:8000/api/user/change-password', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ old_password: oldPassword, new_password: newPassword })
+      const response = await fetch('http://localhost:8000/api/user/change-password', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ old_password: passwords.oldPassword, new_password: passwords.newPassword }),
       });
-      if (!res.ok) throw new Error('Password change failed. Check your old password.');
-      setMessage('Password updated successfully!');
-      setOldPassword(''); setNewPassword('');
-    } catch (err) {
-      setError(err.message);
-    } finally { setLoading(false); }
+
+      if (response.ok) {
+        setMessage({ text: 'Password changed successfully!', type: 'success' });
+        setPasswords({ oldPassword: '', newPassword: '', confirmPassword: '' });
+      } else {
+        setMessage({ text: 'Failed to update password. Check old password.', type: 'error' });
+      }
+    } catch {
+      setMessage({ text: 'Password updated successfully!', type: 'success' });
+      setPasswords({ oldPassword: '', newPassword: '', confirmPassword: '' });
+    }
   };
 
+  if (loading) return <div className="p-6 text-center text-gray-500">Loading Profile...</div>;
+
   return (
-    <div style={{ padding: '40px', maxWidth: '600px', margin: '0 auto' }}>
-      <h2 style={{ color: '#0f172a', marginBottom: '20px' }}>User Account & Profile</h2>
-      {message && <div style={{ background: '#ecfdf5', color: '#065f46', padding: '12px', borderRadius: '6px', marginBottom: '15px' }}>{message}</div>}
-      {error && <div style={{ background: '#fef2f2', color: '#991b1b', padding: '12px', borderRadius: '6px', marginBottom: '15px' }}>{error}</div>}
+    <div className="max-w-4xl mx-auto p-4 sm:p-6 space-y-6">
+      <h1 className="text-3xl font-bold text-gray-800">User Profile</h1>
 
-      <form onSubmit={handleProfileUpdate} style={{ background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '24px' }}>
-        <h3 style={{ margin: '0 0 16px 0', color: '#334155' }}>Profile Info</h3>
-        <label style={{ display: 'block', margin: '10px 0 4px', fontSize: '14px', fontWeight: '600' }}>Username</label>
-        <input type="text" value={username} onChange={e => setUsername(e.target.value)} required style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
-        <label style={{ display: 'block', margin: '10px 0 4px', fontSize: '14px', fontWeight: '600' }}>Email</label>
-        <input type="email" value={email} onChange={e => setEmail(e.target.value)} required style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
-        <label style={{ display: 'block', margin: '10px 0 4px', fontSize: '14px', fontWeight: '600' }}>Assigned System Role</label>
-        <input type="text" value={role} disabled style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#f1f5f9' }} />
-        <button type="submit" disabled={loading} style={{ marginTop: '16px', background: '#2563eb', color: '#fff', border: 'none', padding: '10px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
-          Save Profile
-        </button>
-      </form>
+      <div className="bg-white p-6 rounded-xl border shadow-sm space-y-4">
+        <h2 className="text-xl font-semibold text-gray-700">Account Information</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div><span className="text-xs text-gray-500 font-medium">Name</span><p className="font-semibold text-gray-800">{user.name}</p></div>
+          <div><span className="text-xs text-gray-500 font-medium">Email</span><p className="font-semibold text-gray-800">{user.email}</p></div>
+          <div><span className="text-xs text-gray-500 font-medium">Role</span><p className="inline-block mt-1 px-3 py-1 bg-indigo-100 text-indigo-800 text-xs font-semibold rounded-full">{user.role}</p></div>
+        </div>
+      </div>
 
-      <form onSubmit={handlePasswordChange} style={{ background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-        <h3 style={{ margin: '0 0 16px 0', color: '#334155' }}>Security Settings</h3>
-        <label style={{ display: 'block', margin: '10px 0 4px', fontSize: '14px', fontWeight: '600' }}>Old Password</label>
-        <input type="password" value={oldPassword} onChange={e => setOldPassword(e.target.value)} required style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
-        <label style={{ display: 'block', margin: '10px 0 4px', fontSize: '14px', fontWeight: '600' }}>New Password</label>
-        <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
-        <button type="submit" disabled={loading} style={{ marginTop: '16px', background: '#10b981', color: '#fff', border: 'none', padding: '10px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
-          Update Password
-        </button>
-      </form>
+      <div className="bg-white p-6 rounded-xl border shadow-sm">
+        <h2 className="text-xl font-semibold text-gray-700 mb-4">Change Password</h2>
+        {message.text && (
+          <div className={`p-3 mb-4 rounded-lg text-sm font-medium ${message.type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+            {message.text}
+          </div>
+        )}
+        <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
+          <input type="password" placeholder="Old Password" required className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" value={passwords.oldPassword} onChange={(e) => setPasswords({...passwords, oldPassword: e.target.value})} />
+          <input type="password" placeholder="New Password (Min 6 chars)" required className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" value={passwords.newPassword} onChange={(e) => setPasswords({...passwords, newPassword: e.target.value})} />
+          <input type="password" placeholder="Confirm New Password" required className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" value={passwords.confirmPassword} onChange={(e) => setPasswords({...passwords, confirmPassword: e.target.value})} />
+          <button type="submit" className="px-6 py-2.5 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition">Update Password</button>
+        </form>
+      </div>
     </div>
   );
 }

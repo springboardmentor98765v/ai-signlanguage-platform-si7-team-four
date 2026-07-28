@@ -2,128 +2,192 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 export default function Lessons() {
-  const [lessons, setLessons] = useState([]);
+  const [courses, setCourses] = useState([]);
+  const [selectedCourse, setSelectedCourse] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedDifficulty, setSelectedDifficulty] = useState('All');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchLessons = async () => {
-      setLoading(true);
-      setError(null);
-      
-      const token = localStorage.getItem('access_token');
-      const headers = {
-        'Content-Type': 'application/json',
-        ...(token && { 'Authorization': `Bearer ${token}` })
-      };
-
-      try {
-        // Primary Attempt: Try fetching directly from http://localhost:8000/lessons
-        let res = await fetch('http://localhost:8000/lessons', { headers });
-
-        // Fallback Attempt: If 404, try http://localhost:8000/api/lessons
-        if (res.status === 404) {
-          res = await fetch('http://localhost:8000/api/lessons', { headers });
-        }
-
-        if (!res.ok) {
-          throw new Error(`Server returned HTTP status ${res.status}`);
-        }
-
-        const data = await res.json();
-        
-        // Handle array response or nested object responses like { lessons: [...] }
-        const lessonList = Array.isArray(data) ? data : (data.lessons || []);
-        
-        if (lessonList.length > 0) {
-          setLessons(lessonList);
+    const token = localStorage.getItem('access_token');
+    fetch('http://localhost:8000/api/courses', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        setCourses(data.courses || []);
+        if (data.courses && data.courses.length > 0) {
+          fetchCourseDetails(data.courses[0].course_id);
         } else {
-          // Default curriculum items if backend database table is currently empty
-          setLessons(getFallbackLessons());
+          setLoading(false);
         }
-      } catch (err) {
-        console.warn('Backend fetch failed, loading default local curriculum:', err.message);
-        setError('Connected in offline/demo mode. Displaying default curriculum.');
-        setLessons(getFallbackLessons());
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchLessons();
+      })
+      .catch(() => {
+        const fallbackCourses = [
+          {
+            course_id: 'crs_beginner_01',
+            title: 'Introduction to Sign Language Alphabets',
+            description: 'Learn basic static hand layouts, joint coordinate alignments, and alphabetic gestures.',
+            level: 'Beginner',
+          },
+          {
+            course_id: 'crs_intermediate_02',
+            title: 'Conversational Phrases and Dynamic Movements',
+            description: 'Master gesture sequences, timing, and dynamic moving expressions.',
+            level: 'Intermediate',
+          },
+        ];
+        setCourses(fallbackCourses);
+        fetchCourseDetails('crs_beginner_01');
+      });
   }, []);
 
-  // Fallback curriculum items to prevent blank screens when FastAPI is offline
-  const getFallbackLessons = () => [
-    { lesson_id: 'les_letter_a', title: "Alphabet 'A'", level: 'Beginner', description: 'Master hand positioning for the letter A.', expected: 'A' },
-    { lesson_id: 'les_letter_b', title: "Alphabet 'B'", level: 'Beginner', description: 'Master finger extension for the letter B.', expected: 'B' },
-    { lesson_id: 'les_letter_c', title: "Alphabet 'C'", level: 'Intermediate', description: 'Practice curved hand shapes for the letter C.', expected: 'C' },
-  ];
-
-  const handleStartPractice = (lesson) => {
-    navigate('/practice', {
-      state: {
-        lessonId: lesson.lesson_id || lesson.id,
-        title: lesson.title || lesson.name,
-        expected: lesson.expected || lesson.title?.split("'")[1] || 'A'
-      }
-    });
+  const fetchCourseDetails = (courseId) => {
+    setLoading(true);
+    const token = localStorage.getItem('access_token');
+    fetch(`http://localhost:8000/api/courses/${courseId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        setSelectedCourse(data);
+        setLoading(false);
+      })
+      .catch(() => {
+        setSelectedCourse({
+          course_id: courseId,
+          title: 'Introduction to Sign Language Alphabets',
+          level: 'Beginner',
+          modules: [
+            {
+              module_id: 'mod_alph_01',
+              module_name: 'Static Handshapes (A-E)',
+              lessons: [
+                {
+                  lesson_id: 'les_letter_a',
+                  title: "The Alphabet Letter 'A'",
+                  description: 'Practice holding a closed fist posture with the thumb resting alongside the outer hand.',
+                  expected_gesture: 'A',
+                  difficulty: 'Easy',
+                },
+                {
+                  lesson_id: 'les_letter_b',
+                  title: "The Alphabet Letter 'B'",
+                  description: 'Practice holding an open, flat palm posture with your thumb tucked inwards across your front palm.',
+                  expected_gesture: 'B',
+                  difficulty: 'Easy',
+                },
+              ],
+            },
+          ],
+        });
+        setLoading(false);
+      });
   };
 
-  if (loading) {
-    return (
-      <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
-        <h3>⌛ Loading Curriculum from Backend...</h3>
-      </div>
-    );
-  }
+  const handleStartPractice = (lesson) => {
+    navigate(`/practice?lesson_id=${lesson.lesson_id}`);
+  };
+
+  const allLessons = selectedCourse?.modules?.flatMap((m) =>
+    m.lessons.map((l) => ({ ...l, module_name: m.module_name }))
+  ) || [];
+
+  const filteredLessons = allLessons.filter((l) => {
+    const matchesSearch =
+      l.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      l.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (l.expected_gesture && l.expected_gesture.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    const matchesDifficulty =
+      selectedDifficulty === 'All' || (l.difficulty && l.difficulty === selectedDifficulty);
+
+    return matchesSearch && matchesDifficulty;
+  });
 
   return (
-    <div style={{ padding: '40px', maxWidth: '1000px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+    <div>
+      {/* Header Section */}
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 style={{ color: '#0f172a', margin: 0 }}>Sign Language Curriculum 📚</h1>
-          <p style={{ color: '#64748b', margin: '4px 0 0 0' }}>Select a lesson to begin real-time camera practice and gesture analysis.</p>
+          <p className="page-subtitle">Sign Language Curriculum</p>
+          <h1 className="page-title">Course & Lesson Catalogue</h1>
+        </div>
+
+        {/* Filter Controls */}
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', minWidth: '320px' }}>
+          <input
+            type="text"
+            placeholder="Search lessons or gestures..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            style={{ flex: 1, minWidth: '200px' }}
+          />
+          <select
+            value={selectedDifficulty}
+            onChange={(e) => setSelectedDifficulty(e.target.value)}
+            style={{ width: '140px' }}
+          >
+            <option value="All">All Levels</option>
+            <option value="Easy">Easy</option>
+            <option value="Medium">Medium</option>
+            <option value="Hard">Hard</option>
+          </select>
         </div>
       </div>
 
-      {error && (
-        <div style={{ background: '#fffbe3', borderLeft: '4px solid #f59e0b', color: '#b45309', padding: '12px 16px', borderRadius: '6px', marginBottom: '24px', fontSize: '14px' }}>
-          ⚠️ {error}
-        </div>
-      )}
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
-        {lessons.map((lesson, idx) => (
-          <div 
-            key={lesson.lesson_id || lesson.id || idx}
-            style={{ background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}
+      {/* Course Tabs */}
+      <div style={{ display: 'flex', gap: '0.75rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem', marginBottom: '1.5rem', overflowX: 'auto' }}>
+        {courses.map((course) => (
+          <button
+            key={course.course_id}
+            onClick={() => fetchCourseDetails(course.course_id)}
+            className={selectedCourse?.course_id === course.course_id ? "btn-primary" : "btn-secondary"}
+            style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}
           >
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <span style={{ fontSize: '12px', fontWeight: 'bold', padding: '4px 8px', borderRadius: '4px', background: '#e0f2fe', color: '#0369a1' }}>
-                  {lesson.level || 'Standard'}
-                </span>
-                <span style={{ fontSize: '12px', color: '#94a3b8' }}>
-                  ID: {lesson.lesson_id || lesson.id}
-                </span>
-              </div>
-              <h3 style={{ color: '#0f172a', margin: '0 0 8px 0' }}>{lesson.title || lesson.name}</h3>
-              <p style={{ color: '#64748b', fontSize: '14px', margin: '0 0 20px 0', lineHeight: '1.5' }}>
-                {lesson.description || 'Practice gesture recognition and accuracy.'}
-              </p>
-            </div>
-
-            <button
-              onClick={() => handleStartPractice(lesson)}
-              style={{ width: '100%', background: '#2563eb', color: '#fff', border: 'none', padding: '12px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', transition: 'background 0.2s' }}
-            >
-              ▶️ Start Practice
-            </button>
-          </div>
+            {course.title} ({course.level})
+          </button>
         ))}
       </div>
+
+      {/* Lesson Grid */}
+      {loading ? (
+        <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+          Loading course lessons...
+        </div>
+      ) : filteredLessons.length === 0 ? (
+        <div className="card" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '3rem' }}>
+          No lessons found matching your filters.
+        </div>
+      ) : (
+        <div className="grid-2">
+          {filteredLessons.map((lesson) => (
+            <div key={lesson.lesson_id} className="card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                  <span className="badge badge-primary">{lesson.module_name}</span>
+                  <span className="badge badge-warning">Target Sign: {lesson.expected_gesture}</span>
+                </div>
+                <h3 style={{ fontSize: '1.125rem', fontWeight: '700', marginBottom: '0.5rem', color: 'var(--text-main)' }}>
+                  {lesson.title}
+                </h3>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1.25rem', lineHeight: '1.5' }}>
+                  {lesson.description}
+                </p>
+              </div>
+
+              <button
+                onClick={() => handleStartPractice(lesson)}
+                className="btn-primary"
+                style={{ width: '100%' }}
+              >
+                Practice Lesson
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
