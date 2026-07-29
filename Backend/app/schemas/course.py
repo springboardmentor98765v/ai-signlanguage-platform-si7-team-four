@@ -22,6 +22,7 @@ class ModuleCreate(BaseModel):
     course_id: str  
 
 class ModuleResponse(BaseModel):
+    module_id: Optional[str] = None
     course_id: str
     title: str
     description: str

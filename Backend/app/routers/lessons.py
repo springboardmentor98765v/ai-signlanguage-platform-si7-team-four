@@ -1,9 +1,11 @@
-from fastapi import APIRouter, HTTPException, status, Query, Depends
+from fastapi import APIRouter, HTTPException, status, Query, Depends, UploadFile, File
 from typing import Optional, List
 from pydantic import BaseModel
+import csv
+import io
 from app.utils.security import verify_token_and_role
 
-router = APIRouter(prefix="/lessons", tags=["Lessons Service"])
+router = APIRouter(prefix="/api/lessons", tags=["Lessons Service"])
 
 # --- Pydantic Schemas for Validation ---
 class LessonResponse(BaseModel):
@@ -22,6 +24,9 @@ class LessonCreate(BaseModel):
     expected_gesture: str
     category: Optional[str] = "Alphabet"
     difficulty: Optional[str] = "Easy"
+
+class CSVBulkUploadPayload(BaseModel):
+    csv_content: str
 
 # --- In-Memory Mock Datasets ---
 MOCK_LESSON_DB = {}
@@ -58,7 +63,7 @@ def seed_alphabet_lessons():
     for word in extra_words:
         MOCK_LESSON_DB[word["id"]] = {
             "lesson_id": word["id"],
-            "module_id": mod_id,
+            "module_id": word["id"],
             "title": word["title"],
             "content_description": f"Learn how to sign {word['title']}.",
             "expected_gesture": word["gesture"],
@@ -69,7 +74,7 @@ def seed_alphabet_lessons():
 # Initialize mock data on startup
 seed_alphabet_lessons()
 
-# --- SRS ENDPOINT: Get All Lessons with Search & Pagination ---
+# --- GET ALL LESSONS ---
 
 @router.get("", status_code=status.HTTP_200_OK)
 def get_all_lessons(
@@ -82,7 +87,6 @@ def get_all_lessons(
     """
     lessons_list = list(MOCK_LESSON_DB.values())
     
-    # 1. Search-by-name filter (case-insensitive substring match)
     if search:
         search_lower = search.lower()
         lessons_list = [
@@ -90,10 +94,7 @@ def get_all_lessons(
             if search_lower in les["title"].lower()
         ]
         
-    # 2. Total count after search filtering
     total_count = len(lessons_list)
-    
-    # 3. Pagination slicing (e.g., 10 items per page)
     paginated_lessons = lessons_list[skip : skip + limit]
     
     return {
@@ -103,7 +104,72 @@ def get_all_lessons(
         "data": [LessonResponse(**les) for les in paginated_lessons]
     }
 
-# --- SRS ENDPOINT: Get Single Lesson by ID ---
+# --- STATIC SPECIFIC ROUTES (MUST BE BEFORE /{lesson_id} ROUTE) ---
+
+@router.get("/advanced", status_code=status.HTTP_200_OK)
+def get_advanced_lessons():
+    """
+    Milestone 2 & 3 Requirement: Fetches extended multi-tier advanced lessons catalog.
+    """
+    advanced_lessons = [
+        les for les in MOCK_LESSON_DB.values()
+        if les.get("difficulty") in ["Medium", "Hard"] or les.get("category") == "Words"
+    ]
+    return {
+        "count": len(advanced_lessons),
+        "advanced_lessons": advanced_lessons
+    }
+
+@router.post("/bulk-upload-csv", status_code=status.HTTP_201_CREATED)
+def bulk_upload_lessons_csv(payload: CSVBulkUploadPayload):
+    """
+    Milestone 3 Requirement: Bulk upload lessons via CSV string payload.
+    CSV header format: module_id,title,content_description,expected_gesture,category,difficulty
+    """
+    if not payload or not payload.csv_content.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="CSV content string payload must be provided."
+        )
+
+    f = io.StringIO(payload.csv_content.strip())
+    reader = csv.DictReader(f)
+    
+    created_lessons = []
+    errors = []
+    row_num = 1
+    
+    for row in reader:
+        row_num += 1
+        module_id = row.get("module_id", "").strip()
+        title = row.get("title", "").strip()
+        expected_gesture = row.get("expected_gesture", "").strip()
+        
+        if not title or not expected_gesture:
+            errors.append(f"Row {row_num}: missing required title or expected_gesture.")
+            continue
+            
+        new_id = f"les_csv_{len(MOCK_LESSON_DB) + 1}_{row_num}"
+        new_lesson = {
+            "lesson_id": new_id,
+            "module_id": module_id or "mod_alphabet_101",
+            "title": title,
+            "content_description": row.get("content_description", f"Bulk uploaded lesson {title}"),
+            "expected_gesture": expected_gesture,
+            "category": row.get("category", "General"),
+            "difficulty": row.get("difficulty", "Medium")
+        }
+        MOCK_LESSON_DB[new_id] = new_lesson
+        created_lessons.append(new_lesson)
+        
+    return {
+        "message": f"Successfully parsed and created {len(created_lessons)} lessons.",
+        "created_count": len(created_lessons),
+        "created_lessons": created_lessons,
+        "errors": errors
+    }
+
+# --- DYNAMIC PARAMETER ROUTES ---
 
 @router.get("/{lesson_id}", response_model=LessonResponse, status_code=status.HTTP_200_OK)
 def get_lesson_by_id(lesson_id: str):
@@ -114,8 +180,6 @@ def get_lesson_by_id(lesson_id: str):
         raise HTTPException(status_code=404, detail="The requested lesson could not be found.")
     
     return LessonResponse(**MOCK_LESSON_DB[lesson_id])
-
-# --- DAY 6: CREATE LESSON (Instructor/Admin Only) ---
 
 @router.post("", response_model=LessonResponse, status_code=status.HTTP_201_CREATED)
 def create_lesson(
@@ -139,8 +203,6 @@ def create_lesson(
     
     MOCK_LESSON_DB[new_id] = new_lesson
     return LessonResponse(**new_lesson)
-
-# --- DAY 6: EDIT/UPDATE LESSON (Instructor/Admin Only) ---
 
 @router.put("/{lesson_id}", response_model=LessonResponse, status_code=status.HTTP_200_OK)
 def update_lesson(
@@ -166,8 +228,6 @@ def update_lesson(
     
     MOCK_LESSON_DB[lesson_id] = updated_data
     return LessonResponse(**updated_data)
-
-# --- DAY 6: DELETE LESSON (Instructor/Admin Only) ---
 
 @router.delete("/{lesson_id}", status_code=status.HTTP_200_OK)
 def delete_lesson(
