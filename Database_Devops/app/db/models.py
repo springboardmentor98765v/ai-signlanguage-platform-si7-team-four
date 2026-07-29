@@ -60,7 +60,7 @@ class Lesson(Base):
     title = Column(String(150), nullable=False)
     description = Column(Text)
     expected_gesture = Column(String(5), nullable=False)
-    category = Column(String(20), nullable=False, default="alphabet")
+    category = Column(String(20), nullable=False, default="alphabet", index=True)
     difficulty = Column(String(20), nullable=False, default="easy")
 
     module = relationship("Module", back_populates="lessons")
@@ -103,7 +103,7 @@ class AnalyticsSummary(Base):
     __tablename__ = "analytics_summary"
     id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
     user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), unique=True, nullable=False)
-    overall_accuracy_percentage = Column(Float, default=0.0)
+    overall_accuracy_percentage = Column(Float, default=0.0, index=True)
     lessons_completed = Column(Integer, default=0)
     practice_hours = Column(Float, default=0.0)
     improvement_rate_percentage = Column(Float, default=0.0)
@@ -139,8 +139,8 @@ class Recommendation(Base):
 class InstructorStudent(Base):
     __tablename__ = "instructor_student"
     id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
-    instructor_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
-    student_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    instructor_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False, index=True)
+    student_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False, index=True)
     assigned_at = Column(DateTime, default=datetime.utcnow)
 
     instructor = relationship("User", foreign_keys=[instructor_id], back_populates="students_assigned")
