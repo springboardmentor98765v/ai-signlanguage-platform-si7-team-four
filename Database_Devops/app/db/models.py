@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, ForeignKey, Text
+from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, ForeignKey, Text, Index, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -28,6 +28,9 @@ class User(Base):
     weekly_analytics = relationship("WeeklyAnalytics", back_populates="user")
     students_assigned = relationship("InstructorStudent", foreign_keys="InstructorStudent.instructor_id", back_populates="instructor")
     instructors_assigned = relationship("InstructorStudent", foreign_keys="InstructorStudent.student_id", back_populates="student")
+    notifications = relationship("Notification", back_populates="user")
+    user_badges = relationship("UserBadge", back_populates="user")
+    streak = relationship("Streak", back_populates="user", uselist=False)
 
 class Course(Base):
     __tablename__ = "courses"
@@ -154,3 +157,55 @@ class WeeklyAnalytics(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="weekly_analytics")
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
+    user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    event_type = Column(String(50), nullable=False)
+    message = Column(Text, nullable=False)
+    is_read = Column(Boolean, default=False, nullable=False)
+    related_id = Column(UUID(as_uuid=False), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="notifications")
+
+
+class Badge(Base):
+    __tablename__ = "badges"
+    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
+    name = Column(String(100), unique=True, nullable=False)
+    description = Column(Text, nullable=True)
+    criteria_description = Column(Text, nullable=True)
+    icon_name = Column(String(50), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user_badges = relationship("UserBadge", back_populates="badge")
+
+
+class UserBadge(Base):
+    __tablename__ = "user_badges"
+    __table_args__ = (UniqueConstraint("user_id", "badge_id", name="uq_user_badge"),)
+    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
+    user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    badge_id = Column(UUID(as_uuid=False), ForeignKey("badges.id"), nullable=False)
+    earned_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="user_badges")
+    badge = relationship("Badge", back_populates="user_badges")
+
+
+class Streak(Base):
+    __tablename__ = "streaks"
+    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
+    user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), unique=True, nullable=False)
+    current_streak_count = Column(Integer, default=0, nullable=False)
+    longest_streak_count = Column(Integer, default=0, nullable=False)
+    last_practice_date = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", back_populates="streak")
+
+
+Index("ix_streaks_current_streak_count", Streak.current_streak_count)
