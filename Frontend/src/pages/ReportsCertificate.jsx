@@ -23,19 +23,39 @@ export default function ReportsCertificate() {
       });
   }, []);
 
+  const handleExportCSV = () => {
+    if (!stats) return;
+    const csvContent =
+      'data:text/csv;charset=utf-8,' +
+      ['Metric,Value', `Learner Name,${stats.learnerName}`, `Lessons Completed,${stats.completedLessons}`, `Average Accuracy,${stats.averageScore}%`, `Weak Signs,${stats.weakLetters.join(';')}`, `Issue Date,${stats.issueDate}`].join('\n');
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `${stats.learnerName.replace(/\s+/g, '_')}_Progress_Report.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   if (loading) return <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>Loading Certificate...</div>;
 
   return (
     <div>
-      {/* Header & Print Action Button */}
+      {/* Header & Export Action Buttons */}
       <div className="page-header print-hidden" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <p className="page-subtitle">Achievements & Analytics</p>
           <h1 className="page-title">Progress Report & Certificate</h1>
         </div>
-        <button onClick={() => window.print()} className="btn-primary" style={{ backgroundColor: 'var(--success)' }}>
-          Download / Print Certificate
-        </button>
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <button onClick={handleExportCSV} className="btn-secondary">
+            📥 Export CSV Report
+          </button>
+          <button onClick={() => window.print()} className="btn-primary" style={{ backgroundColor: 'var(--success)' }}>
+            🖨️ Print Certificate
+          </button>
+        </div>
       </div>
 
       {/* Progress Cards */}
@@ -65,7 +85,7 @@ export default function ReportsCertificate() {
         maxWidth: '800px',
         margin: '0 auto'
       }}>
-        <p style={{ fontSize: '0.75rem', uppercase: 'uppercase', letterSpacing: '0.15em', fontWeight: 800, color: '#92400e', marginBottom: '0.5rem' }}>
+        <p style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.15em', fontWeight: 800, color: '#92400e', marginBottom: '0.5rem' }}>
           CERTIFICATE OF COMPLETION
         </p>
         
