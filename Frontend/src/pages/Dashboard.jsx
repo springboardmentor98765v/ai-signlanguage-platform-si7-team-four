@@ -6,6 +6,7 @@ export default function Dashboard() {
   const [recommendations, setRecommendations] = useState([]);
   const [accuracyData, setAccuracyData] = useState([]);
   const [lessonsData, setLessonsData] = useState([]);
+  const [badges, setBadges] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -37,18 +38,11 @@ export default function Dashboard() {
           lessons_completed: 18,
           practice_hours: 24.5,
           improvement_rate_percentage: 12.0,
+          current_streak: 7,
         });
         setRecommendations([
-          {
-            lesson_id: 'les_letter_m',
-            title: 'Letter M Practice',
-            reason: 'Thumb position accuracy fell below 75% in your last 3 attempts.',
-          },
-          {
-            lesson_id: 'les_letter_n',
-            title: 'Letter N Practice',
-            reason: 'Identified as a core weak area this week.',
-          },
+          { lesson_id: 'les_letter_m', title: 'Letter M Practice', reason: 'Thumb position accuracy fell below 75% in your last 3 attempts.' },
+          { lesson_id: 'les_letter_n', title: 'Letter N Practice', reason: 'Identified as a core weak area this week.' },
         ]);
         setAccuracyData([
           { day: 'Mon', accuracy: 75 },
@@ -63,6 +57,15 @@ export default function Dashboard() {
         ]);
         setLoading(false);
       });
+
+    // Milestone 3 Achievement Badges
+    setBadges([
+      { id: 1, title: '🔥 7-Day Streak', desc: 'Practiced 7 days in a row', unlocked: true },
+      { id: 2, title: '🔤 Alphabet Master', desc: 'Scored >80% on all letters A-Z', unlocked: true },
+      { id: 3, title: '🎯 Sharp Shooter', desc: 'Reached 95% single-gesture confidence', unlocked: true },
+      { id: 4, title: '⚡ Speed Learner', desc: 'Completed 5 lessons in 1 day', unlocked: false },
+      { id: 5, title: '🏆 Top 3 Ranking', desc: 'Ranked in top 3 on class leaderboard', unlocked: false },
+    ]);
   }, []);
 
   if (loading) {
@@ -71,12 +74,17 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div className="page-header">
-        <p className="page-subtitle">Welcome Back</p>
-        <h1 className="page-title">Learner Overview</h1>
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '1rem' }}>
+        <div>
+          <p className="page-subtitle">Welcome Back</p>
+          <h1 className="page-title">Learner Overview</h1>
+        </div>
+        <div className="streak-pill card-pop">
+          🔥 <strong>{stats?.current_streak || 7} Day Practice Streak!</strong>
+        </div>
       </div>
 
-      {/* Metrics Row */}
+      {/* Overview Cards */}
       <div className="grid-4" style={{ marginBottom: '1.5rem' }}>
         <div className="card">
           <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Overall Accuracy</span>
@@ -96,7 +104,25 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Recharts Analytics Section */}
+      {/* Milestone 3: Achievements & Badges Grid */}
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--text-main)' }}>
+          Achievement Badges
+        </h3>
+        <div className="grid-3">
+          {badges.map((b) => (
+            <div key={b.id} className={`badge-card ${b.unlocked ? 'unlocked card-pop' : 'locked'}`}>
+              <div style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.25rem' }}>{b.title}</div>
+              <div style={{ fontSize: '0.8rem', color: b.unlocked ? '#1e1b4b' : 'var(--text-light)' }}>{b.desc}</div>
+              <span className={`badge ${b.unlocked ? 'badge-success' : 'badge-secondary'}`} style={{ marginTop: '0.5rem' }}>
+                {b.unlocked ? 'Unlocked' : 'Locked'}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Analytics Charts */}
       <div className="grid-2" style={{ marginBottom: '1.5rem' }}>
         <div className="card">
           <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--text-main)' }}>Accuracy Progress</h3>

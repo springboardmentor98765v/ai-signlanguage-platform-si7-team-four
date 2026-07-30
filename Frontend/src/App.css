@@ -434,3 +434,82 @@ tr:last-child td {
   border-radius: var(--radius-full);
   transition: width 0.3s ease;
 }
+/* ==========================================================================
+   MILESTONE 3: NOTIFICATIONS, BADGES & ANIMATIONS
+   ========================================================================== */
+
+/* Notification Badge Dot */
+.notif-badge {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  background-color: var(--danger);
+  color: #ffffff;
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 0.15rem 0.35rem;
+  border-radius: var(--radius-full);
+}
+
+/* Notification Dropdown */
+.notif-dropdown {
+  position: absolute;
+  right: 0;
+  top: 2.2rem;
+  width: 280px;
+  background-color: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+  box-shadow: var(--shadow-md);
+  z-index: 100;
+}
+
+.notif-item {
+  padding: 0.5rem;
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.35rem;
+  background-color: #f8fafc;
+}
+
+.notif-item.unread {
+  background-color: var(--primary-light);
+  border-left: 3px solid var(--primary);
+}
+
+/* Badges & Streaks Styling */
+.streak-pill {
+  background-color: #fff7ed;
+  border: 1px solid #ffedd5;
+  color: #c2410c;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-full);
+  font-size: 0.875rem;
+}
+
+.badge-card {
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-card);
+}
+
+.badge-card.unlocked {
+  border-color: #a7f3d0;
+  background-color: #f0fdf4;
+}
+
+.badge-card.locked {
+  opacity: 0.6;
+  filter: grayscale(1);
+}
+
+/* Micro-Animations */
+.card-pop {
+  animation: popIn 0.3s ease-out;
+}
+
+@keyframes popIn {
+  0% { transform: scale(0.95); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
