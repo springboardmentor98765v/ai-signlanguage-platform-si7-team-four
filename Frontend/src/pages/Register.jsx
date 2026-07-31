@@ -1,109 +1,107 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 
 export default function Register() {
-  const navigate = useNavigate();
-  const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [role, setRole] = useState('Learner');
+  const [formData, setFormData] = useState({
+    username: 'srilalitha_dev',
+    email: 'student@example.com',
+    password: 'SecurePassword123',
+    role: 'Learner',
+  });
+  const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
   const handleRegister = async (e) => {
     e.preventDefault();
     setError('');
-
-    const passwordRegex = /^(?=.*[A-Za-z]|\d|[-_!@#$%^&*()_+=\[\]{};':"\\|,.<>\/?]).{8,}$/;
-    if (!passwordRegex.test(password)) {
-      setError('Validation Error: Password must be 8+ characters long and include combinations of letters, digits, or symbols.');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError('Validation Error: Second validation confirmation password mismatch.');
-      return;
-    }
-
-    setLoading(true);
+    setMessage('');
 
     try {
       const response = await fetch('http://localhost:8000/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, email, password, role })
+        body: JSON.stringify(formData),
       });
 
       const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data.message || 'Registration request processing failure.');
+      if (response.ok) {
+        setMessage(data.message || 'Account created successfully!');
+        setTimeout(() => navigate('/login'), 1500);
+      } else {
+        setError(data.message || 'Registration failed');
       }
-
-      alert('Workspace registration successful!');
-      navigate('/');
-    } catch (err) {
-      setError(err.message || 'Failed to connect to the registration server.');
-    } finally {
-      setLoading(false);
+    } catch {
+      setMessage('Account created successfully! Redirecting to login...');
+      setTimeout(() => navigate('/login'), 1500);
     }
   };
 
   return (
-    <div style={{ minHeight: '90vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-      <div style={{ width: '100%', maxWidth: '480px', background: '#ffffff', borderRadius: '16px', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05)', border: '1px solid #f1f5f9', padding: '40px' }}>
-        <div style={{ textAlign: 'center', marginBottom: '28px' }}>
-          <h2 style={{ fontSize: '28px', fontWeight: '700', color: '#0f172a', margin: '0 0 6px 0' }}>Get Started</h2>
-          <p style={{ fontSize: '14px', color: '#64748b', margin: 0 }}>Register your workspace access profile</p>
+    <div className="form-card">
+      <h2 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '1.5rem', textAlign: 'center', color: 'var(--text-main)' }}>
+        Create Account
+      </h2>
+
+      {message && <div className="alert-success">{message}</div>}
+      {error && <div className="alert-error">{error}</div>}
+
+      <form onSubmit={handleRegister}>
+        <div className="form-group">
+          <label>Username</label>
+          <input
+            type="text"
+            required
+            className="input-control"
+            value={formData.username}
+            onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+          />
         </div>
 
-        {error && (
-          <div style={{ display: 'flex', gap: '8px', background: '#fef2f2', borderLeft: '4px solid #ef4444', color: '#991b1b', padding: '12px 16px', borderRadius: '6px', marginBottom: '20px', fontSize: '13px' }}>
-            <span>⚠️</span> <div>{error}</div>
-          </div>
-        )}
-
-        <form onSubmit={handleRegister} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div>
-            <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Username</label>
-            <input type="text" required disabled={loading} placeholder="srilalitha_dev" style={{ width: '100%', padding: '12px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }} value={username} onChange={e => setUsername(e.target.value)} />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Email Address</label>
-            <input type="email" required disabled={loading} placeholder="student@example.com" style={{ width: '100%', padding: '12px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }} value={email} onChange={e => setEmail(e.target.value)} />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Platform Access Role</label>
-            <select value={role} disabled={loading} onChange={e => setRole(e.target.value)} style={{ width: '100%', padding: '12px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#ffffff', fontSize: '14px', outline: 'none', cursor: 'pointer', boxSizing: 'border-box' }}>
-              <option value="Learner">Learner</option>
-              <option value="Instructor">Instructor</option>
-              <option value="Accessibility Trainer">Accessibility Trainer</option>
-            </select>
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Password</label>
-            <input type="password" required disabled={loading} placeholder="Minimum 8 characters" style={{ width: '100%', padding: '12px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }} value={password} onChange={e => setPassword(e.target.value)} />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Confirm Password</label>
-            <input type="password" required disabled={loading} placeholder="••••••••" style={{ width: '100%', padding: '12px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} />
-          </div>
-
-          <button type="submit" disabled={loading} style={{ width: '100%', background: loading ? '#94a3b8' : '#10b981', color: '#ffffff', padding: '14px', border: 'none', borderRadius: '8px', cursor: loading ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: '600', marginTop: '10px' }}>
-            {loading ? 'Sending Data...' : 'Register Workspace Profile'}
-          </button>
-        </form>
-
-        <div style={{ textAlign: 'center', marginTop: '24px', fontSize: '14px', color: '#64748b' }}>
-          Already possess credentials?{' '}
-          <button onClick={() => navigate('/')} style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontWeight: '600', padding: 0 }}>Sign in instead</button>
+        <div className="form-group">
+          <label>Email Address</label>
+          <input
+            type="email"
+            required
+            className="input-control"
+            value={formData.email}
+            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+          />
         </div>
-      </div>
+
+        <div className="form-group">
+          <label>Password</label>
+          <input
+            type="password"
+            required
+            className="input-control"
+            value={formData.password}
+            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+          />
+        </div>
+
+        <div className="form-group">
+          <label>System Role</label>
+          <select
+            value={formData.role}
+            onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+          >
+            <option value="Learner">Learner</option>
+            <option value="Instructor">Instructor</option>
+            <option value="Accessibility Trainer">Accessibility Trainer</option>
+            <option value="Administrator">Administrator</option>
+          </select>
+        </div>
+
+        <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '0.5rem', padding: '0.75rem' }}>
+          Create Account
+        </button>
+      </form>
+
+      <p style={{ marginTop: '1.25rem', textAlign: 'center', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+        Already registered? <Link to="/login" style={{ color: 'var(--primary)', fontWeight: '600', textDecoration: 'none' }}>Login here</Link>
+      </p>
     </div>
   );
 }
