@@ -1,4 +1,3 @@
-#importing libraries
 import os
 import pandas as pd
 from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
@@ -11,7 +10,7 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 import matplotlib.pyplot as plt
 import joblib
 
-#Directory paths
+# Directory paths
 try:
     from xgboost import XGBClassifier
     XGBOOST_AVAILABLE = True
@@ -28,9 +27,9 @@ KAGGLE_CSV = os.path.join(DATASET_RAW_DIR, "kaggle_features.csv")
 MODEL_OUT = os.path.join(ML_DIR, "sign_model.joblib")
 CONFUSION_MATRIX_OUT = os.path.join(ML_DIR, "confusion_matrix.png")
 
-WEBCAM_TARGET_SHARE = 0.35 
+WEBCAM_TARGET_SHARE = 0.35
 
-# model training : model parameter specification
+
 def load_data():
     sources = {WEBCAM_CSV: "webcam", KAGGLE_CSV: "kaggle"}
     frames = []
@@ -38,7 +37,6 @@ def load_data():
     for path, source in sources.items():
         try:
             frame = pd.read_csv(path)
-            # Clean label whitespace and force string type
             frame["label"] = frame["label"].astype(str).str.strip()
             frame["_source"] = source
             frames.append(frame)
@@ -50,7 +48,10 @@ def load_data():
 
     df = pd.concat(frames, ignore_index=True)
     df = df.dropna()
+    return df  # keep "_source" column — needed by oversample_webcam()
 
+
+def oversample_webcam(df):
     webcam_df = df[df["_source"] == "webcam"]
     kaggle_df = df[df["_source"] == "kaggle"]
 
@@ -66,6 +67,7 @@ def load_data():
         df = pd.concat([webcam_oversampled, kaggle_df], ignore_index=True)
 
     return df.drop(columns=["_source"])
+
 
 def build_models():
     models = {
@@ -96,21 +98,36 @@ def build_models():
 
     return models
 
-# model comparrision and selection 
+
 def main():
     df = load_data()
-    print("Total samples:", len(df))
+    print("Total raw samples:", len(df))
     print(df["label"].value_counts())
     print()
 
-    X = df.drop(columns=["label"])
-
+    X_raw = df.drop(columns=["label", "_source"])
     encoder = LabelEncoder()
-    y = encoder.fit_transform(df["label"])
+    y_raw = encoder.fit_transform(df["label"])
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, stratify=y, random_state=42
+   # splitting before oversampling to fix the leakage issue
+    X_train_raw, X_test, y_train_raw, y_test = train_test_split(
+        X_raw, y_raw, test_size=0.2, stratify=y_raw, random_state=42
     )
+
+    # Reattach label + source (needed by oversample_webcam) to the
+    # training portion only, then oversample just that portion.
+    train_df = X_train_raw.copy()
+    train_df["label"] = encoder.inverse_transform(y_train_raw)
+    train_df["_source"] = df.loc[X_train_raw.index, "_source"].values
+
+    train_df = oversample_webcam(train_df)
+
+    X_train = train_df.drop(columns=["label"])
+    y_train = encoder.transform(train_df["label"])
+
+    print("Training samples after oversampling:", len(X_train))
+    print("Test samples (untouched, no oversampling):", len(X_test))
+    print()
 
     models = build_models()
     results = []
@@ -147,7 +164,7 @@ def main():
 
     os.makedirs(ML_DIR, exist_ok=True)
 
-    # Confusion matrix
+    # Confusion matrix (built from the untouched, honest test set)
     best_preds = best["pipeline"].predict(X_test)
     cm = confusion_matrix(y_test, best_preds, labels=encoder.transform(encoder.classes_))
     disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=encoder.classes_)
@@ -167,27 +184,19 @@ def main():
     for letter, recall in weak_letters[:5]:
         print(f"  {letter}: {recall:.2f}")
 
-    #Adding correction logic
-
-    # Day 7: per-class centroids of the *interpretable* engineered features
-    # (finger angles + fingertip distances) — not the 63 raw landmark
-    # coordinates, which don't translate into a hint a person can act on.
-    # predict.py compares a live hand against the target letter's centroid
-    # to find which specific feature is most "off".
-
+    
     interpretable_prefixes = ("dist_", "angle_")
-    interpretable_names = [c for c in X.columns if c.startswith(interpretable_prefixes)]
-    interpretable_idx = [X.columns.get_loc(c) for c in interpretable_names]
+    interpretable_names = [c for c in X_raw.columns if c.startswith(interpretable_prefixes)]
+    interpretable_idx = [X_train_raw.columns.get_loc(c) for c in interpretable_names]
 
     scaler = best["pipeline"].named_steps["scale"]
-    X_scaled_all = scaler.transform(X)
+    X_train_raw_scaled = scaler.transform(X_train_raw)
 
     centroids = {}
     for class_idx, class_label in enumerate(encoder.classes_):
-        rows = X_scaled_all[y == class_idx][:, interpretable_idx]
+        rows = X_train_raw_scaled[y_train_raw == class_idx][:, interpretable_idx]
         centroids[class_label] = dict(zip(interpretable_names, rows.mean(axis=0)))
 
-    # Centroid logic saved in the model with addition of two new outputs
     joblib.dump({
         "pipeline": best["pipeline"],
         "label_encoder": encoder,
@@ -201,7 +210,13 @@ if __name__ == "__main__":
     main()
 
     try:
-        from google.colab import files
-        files.download(MODEL_OUT)
+        from google.colab import drive
+        import shutil
+        drive.mount('/content/drive', force_remount=False)
+        drive_dest = '/content/drive/MyDrive/sign_model.joblib'
+        shutil.copy(MODEL_OUT, drive_dest)
+        print(f"Also copied to Google Drive: {drive_dest}")
     except ImportError:
-        pass
+        pass  # not running in Colab
+    except Exception as e:
+        print(f"Could not save to Google Drive: {e}")
