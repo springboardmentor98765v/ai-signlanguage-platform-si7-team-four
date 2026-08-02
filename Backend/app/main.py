@@ -46,13 +46,14 @@ app.include_router(practice.router)
 app.include_router(course.router, prefix="/courses")
 app.include_router(practice.router, prefix="/practice")
 
-@app.get("/health", tags=["System Health & Status"])
+@app.api_route("/health", methods=["GET", "HEAD"], tags=["System Health & Status"])
 def health_check():
     """
-    Final health check endpoint to confirm backend container and environment variables are active.
+    Final health check endpoint supporting both GET and HEAD to confirm backend status for uptime monitors.
     """
     return {"status": "healthy", "env_loaded": bool(SECRET_KEY), "api_status": "frozen_production_ready"}
-
+ 
+ 
 @app.get("/", tags=["System Health & Status"])
 def read_root():
     """

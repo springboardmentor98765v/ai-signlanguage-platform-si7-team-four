@@ -2,71 +2,96 @@ import React, { useState, useEffect } from 'react';
 
 export default function AdminDashboard() {
   const [users, setUsers] = useState([]);
+  const [lessons, setLessons] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchUsers();
+    Promise.all([
+      fetch('http://localhost:8000/api/admin/users').then((res) => res.json()),
+      fetch('http://localhost:8000/api/admin/lessons').then((res) => res.json()),
+    ])
+      .then(([userData, lessonData]) => {
+        setUsers(userData);
+        setLessons(lessonData);
+        setLoading(false);
+      })
+      .catch(() => {
+        setUsers([
+          { id: 1, name: 'Parvathy Manoj', role: 'Learner', active: true },
+          { id: 2, name: 'Instructor John', role: 'Instructor', active: true },
+          { id: 3, name: 'Inactive Test User', role: 'Learner', active: false },
+        ]);
+        setLessons([
+          { id: 101, title: 'Alphabet Basics (A-E)', level: 'Beginner', totalLearners: 42 },
+          { id: 102, title: 'Numbers (1-10)', level: 'Beginner', totalLearners: 35 },
+          { id: 103, title: 'Common Phrases', level: 'Intermediate', totalLearners: 18 },
+        ]);
+        setLoading(false);
+      });
   }, []);
 
-  const fetchUsers = async () => {
+  const toggleStatus = async (id, currentStatus) => {
     try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch('http://localhost:8000/api/admin/users', {
-        headers: { 'Authorization': `Bearer ${token}` }
+      await fetch(`http://localhost:8000/api/admin/users/${id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: !currentStatus }),
       });
-      const data = await res.json();
-      setUsers(data.users || [
-        { user_id: 'usr_1', username: 'srilalitha_dev', role: 'Learner', is_active: true },
-        { user_id: 'usr_2', username: 'instructor_john', role: 'Instructor', is_active: true }
-      ]);
-    } catch (err) { console.error(err); }
+    } catch {
+      console.log('Toggled status in state');
+    }
+    setUsers(users.map((u) => (u.id === id ? { ...u, active: !u.active } : u)));
   };
 
-  const toggleUserStatus = async (userId, currentStatus) => {
-    const token = localStorage.getItem('access_token');
-    await fetch(`http://localhost:8000/api/admin/users/${userId}/status`, {
-      method: 'PATCH',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ is_active: !currentStatus })
-    });
-    setUsers(users.map(u => u.user_id === userId ? { ...u, is_active: !currentStatus } : u));
-  };
+  if (loading) return <div className="p-6 text-center text-gray-500">Loading Admin Dashboard...</div>;
 
   return (
-    <div style={{ padding: '40px', maxWidth: '1000px', margin: '0 auto' }}>
-      <h1 style={{ color: '#0f172a', marginBottom: '8px' }}>Admin Workspace Control ⚙️</h1>
-      <p style={{ color: '#64748b', marginBottom: '24px' }}>Platform user access, roles, and course catalogue overview.</p>
+    <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-8">
+      <h1 className="text-3xl font-bold text-gray-800">Admin Dashboard</h1>
 
-      <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-          <thead style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-            <tr>
-              <th style={{ padding: '14px' }}>User ID</th>
-              <th style={{ padding: '14px' }}>Username</th>
-              <th style={{ padding: '14px' }}>Role</th>
-              <th style={{ padding: '14px' }}>Status</th>
-              <th style={{ padding: '14px' }}>Action</th>
+      <div className="bg-white p-6 rounded-xl border shadow-sm space-y-4">
+        <h2 className="text-xl font-semibold text-gray-700">User Management</h2>
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-gray-50 border-b text-sm font-semibold text-gray-600">
+              <th className="p-3">User</th>
+              <th className="p-3">Role</th>
+              <th className="p-3">Status</th>
+              <th className="p-3">Action</th>
             </tr>
           </thead>
-          <tbody>
-            {users.map(u => (
-              <tr key={u.user_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                <td style={{ padding: '14px', fontSize: '12px', color: '#64748b' }}>{u.user_id}</td>
-                <td style={{ padding: '14px', fontWeight: '600' }}>{u.username}</td>
-                <td style={{ padding: '14px' }}>{u.role}</td>
-                <td style={{ padding: '14px' }}>
-                  <span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', background: u.is_active ? '#ecfdf5' : '#fef2f2', color: u.is_active ? '#065f46' : '#991b1b' }}>
-                    {u.is_active ? 'Active' : 'Disabled'}
+          <tbody className="divide-y divide-gray-100">
+            {users.map((u) => (
+              <tr key={u.id}>
+                <td className="p-3 font-medium text-gray-800">{u.name}</td>
+                <td className="p-3 text-sm text-gray-600">{u.role}</td>
+                <td className="p-3">
+                  <span className={`px-2 py-1 text-xs font-semibold rounded-full ${u.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                    {u.active ? 'Active' : 'Inactive'}
                   </span>
                 </td>
-                <td style={{ padding: '14px' }}>
-                  <button onClick={() => toggleUserStatus(u.user_id, u.is_active)} style={{ padding: '6px 12px', borderRadius: '4px', border: 'none', cursor: 'pointer', background: u.is_active ? '#ef4444' : '#10b981', color: '#fff' }}>
-                    {u.is_active ? 'Deactivate' : 'Activate'}
+                <td className="p-3">
+                  <button onClick={() => toggleStatus(u.id, u.active)} className={`px-3 py-1 text-xs font-semibold rounded transition ${u.active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>
+                    {u.active ? 'Deactivate' : 'Activate'}
                   </button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="bg-white p-6 rounded-xl border shadow-sm space-y-4">
+        <h2 className="text-xl font-semibold text-gray-700">System Lessons Catalogue</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {lessons.map((l) => (
+            <div key={l.id} className="p-4 border rounded-lg bg-gray-50">
+              <p className="font-bold text-gray-800">{l.title}</p>
+              <p className="text-xs text-indigo-600 font-semibold mt-1">Level: {l.level}</p>
+              <p className="text-xs text-gray-500 mt-2">Active Learners: {l.totalLearners}</p>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
