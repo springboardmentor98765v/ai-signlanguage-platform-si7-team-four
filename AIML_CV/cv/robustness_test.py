@@ -11,12 +11,14 @@ from camera import Camera
 from hand_detector import HandDetector
 from feature_extractor import FeatureExtractor
 from predict import predict_with_feedback
+import string
 
 # --- change this every run ---
 CONDITION = "bright_light"
 
-# A representative subset rather than all 26 — includes the letters that.
-TEST_LABELS = ["A", "S", "O", "M", "N", "E", "U", "T"]
+# Test all 26 uppercase alphabet letters
+
+TEST_LABELS = list(string.ascii_uppercase)
 
 LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                          "..", "dataset", "raw", "robustness_log.csv")
