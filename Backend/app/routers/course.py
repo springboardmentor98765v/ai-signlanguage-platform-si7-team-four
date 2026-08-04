@@ -4,7 +4,7 @@ from app.utils.security import verify_token_and_role
 from typing import List
 
 # Router initialized
-router = APIRouter()
+router = APIRouter(prefix="/api/courses", tags=["Course Service"])
 
 # In-memory curriculum datasets
 MOCK_MODULE_DB = {}

@@ -17,7 +17,7 @@ import requests
 import base64
 from io import BytesIO
 
-router = APIRouter(tags=["Practice Service"])
+router = APIRouter(prefix="/api/practice", tags=["Practice Service"])
 
 
 # Schema for creating a practice session
