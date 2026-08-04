@@ -16,14 +16,22 @@ def group_scores_by_sign(attempts: List[dict]) -> Dict[str, List[float]]:
 def get_last_n_scores(scores: List[float], n: int = ATTEMPT_WINDOW) -> List[float]:
     return scores[-n:]
 
-
 def needs_extra_practice(scores: List[float]) -> bool:
     last_scores = get_last_n_scores(scores)
+
     if len(last_scores) < ATTEMPT_WINDOW:
         return False
-    average_score = sum(last_scores) / len(last_scores)
-    return average_score < SCORE_THRESHOLD
 
+    weights = list(range(1, len(last_scores) + 1))
+
+    weighted_sum = sum(
+        score * weight
+        for score, weight in zip(last_scores, weights)
+    )
+
+    weighted_average = weighted_sum / sum(weights)
+
+    return weighted_average < SCORE_THRESHOLD
 
 def generate_recommendations(attempts: List[dict]) -> List[dict]:
     grouped_scores = group_scores_by_sign(attempts)
