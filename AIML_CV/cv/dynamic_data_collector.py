@@ -7,10 +7,10 @@ from camera import Camera
 from hand_detector import HandDetector
 
 # --- change this per collection session ---
-DYNAMIC_LABELS = ["J", "Z"]  # add word signs here later, e.g. "HELLO"
+DYNAMIC_LABELS = ["J", "Z", "hello", "no", "please", "thank_you", "yes"]
 
 # How long to record per burst, and at what rate
-CAPTURE_DURATION_SEC = 1.6
+CAPTURE_DURATION_SEC = 3
 TARGET_FPS = 20  # frames captured per burst (approx)
 
 OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -80,8 +80,29 @@ def run_session():
                 display = frame.copy()
                 if results.hand_landmarks:
                     detector.draw_landmarks(display, results)
-                cv2.putText(display, f"Sign: {label}  SPACE=record  N=next  Q=quit",
-                            (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                cv2.putText(display,
+                            f"Sign: {label}",
+                            (10, 30),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.7,
+                            (0, 255, 0),
+                            2)
+
+                cv2.putText(display,
+                            f"Samples: {existing}",
+                            (10, 60),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.7,
+                            (255, 255, 0),
+                            2)
+
+                cv2.putText(display,
+                            "SPACE=Record  N=Next  Q=Quit",
+                            (10, 90),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.7,
+                            (255, 255, 255),
+                            2)
                 cv2.imshow("Dynamic sign collector", display)
                 key = cv2.waitKey(1) & 0xFF
 
@@ -104,7 +125,11 @@ def run_session():
                     ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
                     out_path = os.path.join(label_dir, f"{label}_{ts}.npy")
                     np.save(out_path, sequence)
-                    print(f"  Saved {sequence.shape[0]} frames -> {out_path}")
+
+                    existing += 1
+
+                    print(f"  Saved burst #{existing} ({sequence.shape[0]} frames)")
+                    print(f"  Total samples for {label}: {existing}")
 
     except KeyboardInterrupt:
         print("\nStopped early.")
