@@ -78,7 +78,7 @@ def health_check():
         "milestone_tracker": {
             "milestone_1": "Complete",
             "milestone_2": "Complete",
-            "milestone_3": "Day 1 Complete"
+            "milestone_3": "Day 2 Complete"
         }
     }
  
@@ -92,6 +92,7 @@ def read_root():
         "milestone_tracker": {
             "milestone_1": "Complete",
             "milestone_2": "Complete",
-            "milestone_3_day_1": "Passed"
+            "milestone_3_day_1": "Passed",
+            "milestone_3_day_2": "Passed"
         }
     }

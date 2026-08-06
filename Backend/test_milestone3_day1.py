@@ -100,7 +100,7 @@ def test_milestone3_notification_service():
     })
     assert create_res.status_code == 201
     notif = create_res.json()
-    notif_id = notif["notification_id"]
+    notif_id = notif["id"]   # Day 2: DB-backed field is 'id'
     assert notif["is_read"] is False
 
     # 2. Get Unread Count
@@ -108,8 +108,8 @@ def test_milestone3_notification_service():
     assert count_res.status_code == 200
     assert count_res.json()["unread_count"] >= 1
 
-    # 3. List Notifications
-    list_res = client.get(f"/api/notifications?user_id={user_id}")
+    # 3. List My Notifications (Day 2: /me endpoint)
+    list_res = client.get(f"/api/notifications/me?user_id={user_id}")
     assert list_res.status_code == 200
     assert len(list_res.json()) >= 1
 
@@ -121,6 +121,7 @@ def test_milestone3_notification_service():
     # 5. Delete Notification
     del_res = client.delete(f"/api/notifications/{notif_id}")
     assert del_res.status_code == 200
+
 
 def test_milestone3_bulk_admin_actions():
     """Test Bulk Admin Actions: Bulk Status, Bulk Role, Bulk Delete."""

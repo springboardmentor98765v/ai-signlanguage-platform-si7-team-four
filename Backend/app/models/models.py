@@ -140,5 +140,23 @@ class InstructorStudent(Base):
 
     assigned_at = Column(DateTime, default=datetime.utcnow)
 
-    
 
+# ============================================================
+# Milestone 3 - Day 2: Notifications table
+# Created with Intern 5 (Database/DevOps) collaboration
+# ============================================================
+class Notification(Base):
+    """
+    Database-backed Notifications table.
+    Stores all platform notifications for users, supports
+    create, list (by user), and mark-as-read operations.
+    """
+    __tablename__ = "notifications"
+
+    id = Column(String(36), primary_key=True, default=new_id)
+    user_id = Column(String(36), nullable=False, index=True)
+    title = Column(String(200), nullable=False)
+    message = Column(Text, nullable=False)
+    notification_type = Column(String(20), nullable=False, default="info")
+    is_read = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
