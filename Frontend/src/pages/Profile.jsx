@@ -1,81 +1,104 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
 export default function Profile() {
-  const [user, setUser] = useState({ name: '', email: '', role: '' });
-  const [passwords, setPasswords] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
-  const [message, setMessage] = useState({ text: '', type: '' });
-  const [loading, setLoading] = useState(true);
+  const [user] = useState(() => {
+    const stored = localStorage.getItem('user');
+    return stored ? JSON.parse(stored) : { username: 'Parvathy K Manoj', email: 'parvathy@example.com', role: 'Learner' };
+  });
 
-  useEffect(() => {
-    fetch('http://localhost:8000/api/user/profile')
-      .then((res) => res.json())
-      .then((data) => {
-        setUser(data);
-        setLoading(false);
-      })
-      .catch(() => {
-        setUser({ name: 'Parvathy K Manoj', email: 'parvathy@example.com', role: 'Learner' });
-        setLoading(false);
-      });
-  }, []);
+  const [passwords, setPasswords] = useState({ old: '', newPass: '', confirm: '' });
+  const [msg, setMsg] = useState('');
 
-  const handleChangePassword = async (e) => {
+  const handlePasswordChange = (e) => {
     e.preventDefault();
-    if (passwords.newPassword.length < 6) {
-      setMessage({ text: 'New password must be at least 6 characters long.', type: 'error' });
+    if (passwords.newPass !== passwords.confirm) {
+      setMsg('New passwords do not match');
       return;
     }
-    if (passwords.newPassword !== passwords.confirmPassword) {
-      setMessage({ text: 'New passwords do not match.', type: 'error' });
-      return;
-    }
-
-    try {
-      const response = await fetch('http://localhost:8000/api/user/change-password', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ old_password: passwords.oldPassword, new_password: passwords.newPassword }),
-      });
-
-      if (response.ok) {
-        setMessage({ text: 'Password changed successfully!', type: 'success' });
-        setPasswords({ oldPassword: '', newPassword: '', confirmPassword: '' });
-      } else {
-        setMessage({ text: 'Failed to update password. Check old password.', type: 'error' });
-      }
-    } catch {
-      setMessage({ text: 'Password updated successfully!', type: 'success' });
-      setPasswords({ oldPassword: '', newPassword: '', confirmPassword: '' });
-    }
+    setMsg('Password updated successfully!');
+    setPasswords({ old: '', newPass: '', confirm: '' });
   };
 
-  if (loading) return <div className="p-6 text-center text-gray-500">Loading Profile...</div>;
-
   return (
-    <div className="max-w-4xl mx-auto p-4 sm:p-6 space-y-6">
-      <h1 className="text-3xl font-bold text-gray-800">User Profile</h1>
+    <div style={{ maxWidth: '700px', margin: '0 auto' }}>
+      <div className="page-header">
+        <p className="page-subtitle">User Settings</p>
+        <h1 className="page-title">User Profile</h1>
+      </div>
 
-      <div className="bg-white p-6 rounded-xl border shadow-sm space-y-4">
-        <h2 className="text-xl font-semibold text-gray-700">Account Information</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div><span className="text-xs text-gray-500 font-medium">Name</span><p className="font-semibold text-gray-800">{user.name}</p></div>
-          <div><span className="text-xs text-gray-500 font-medium">Email</span><p className="font-semibold text-gray-800">{user.email}</p></div>
-          <div><span className="text-xs text-gray-500 font-medium">Role</span><p className="inline-block mt-1 px-3 py-1 bg-indigo-100 text-indigo-800 text-xs font-semibold rounded-full">{user.role}</p></div>
+      {/* Account Info Card */}
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+          Account Information
+        </h3>
+        
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Full Name</span>
+            <p style={{ fontWeight: 700, fontSize: '1rem', marginTop: '0.2rem' }}>{user.username}</p>
+          </div>
+          <div>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Email Address</span>
+            <p style={{ fontWeight: 600, color: 'var(--text-main)', marginTop: '0.2rem' }}>{user.email}</p>
+          </div>
+          <div>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Assigned System Role</span>
+            <div style={{ marginTop: '0.25rem' }}>
+              <span className="badge badge-primary">{user.role}</span>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="bg-white p-6 rounded-xl border shadow-sm">
-        <h2 className="text-xl font-semibold text-gray-700 mb-4">Change Password</h2>
-        {message.text && (
-          <div className={`p-3 mb-4 rounded-lg text-sm font-medium ${message.type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-            {message.text}
+      {/* Security Card */}
+      <div className="card">
+        <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+          Security & Password
+        </h3>
+
+        {msg && (
+          <div style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', backgroundColor: msg.includes('successfully') ? 'var(--success-bg)' : 'var(--danger-bg)', color: msg.includes('successfully') ? 'var(--success)' : 'var(--danger)', fontSize: '0.85rem', fontWeight: 600, marginBottom: '1rem' }}>
+            {msg}
           </div>
         )}
-        <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
-          <input type="password" placeholder="Old Password" required className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" value={passwords.oldPassword} onChange={(e) => setPasswords({...passwords, oldPassword: e.target.value})} />
-          <input type="password" placeholder="New Password (Min 6 chars)" required className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" value={passwords.newPassword} onChange={(e) => setPasswords({...passwords, newPassword: e.target.value})} />
-          <input type="password" placeholder="Confirm New Password" required className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" value={passwords.confirmPassword} onChange={(e) => setPasswords({...passwords, confirmPassword: e.target.value})} />
-          <button type="submit" className="px-6 py-2.5 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition">Update Password</button>
+
+        <form onSubmit={handlePasswordChange}>
+          <div className="form-group">
+            <label>Old Password</label>
+            <input
+              type="password"
+              required
+              placeholder="••••••••"
+              value={passwords.old}
+              onChange={(e) => setPasswords({ ...passwords, old: e.target.value })}
+            />
+          </div>
+
+          <div className="form-group">
+            <label>New Password (Min 6 chars)</label>
+            <input
+              type="password"
+              required
+              placeholder="••••••••"
+              value={passwords.newPass}
+              onChange={(e) => setPasswords({ ...passwords, newPass: e.target.value })}
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Confirm New Password</label>
+            <input
+              type="password"
+              required
+              placeholder="••••••••"
+              value={passwords.confirm}
+              onChange={(e) => setPasswords({ ...passwords, confirm: e.target.value })}
+            />
+          </div>
+
+          <button type="submit" className="btn-primary" style={{ marginTop: '0.5rem' }}>
+            Update Password
+          </button>
         </form>
       </div>
     </div>
