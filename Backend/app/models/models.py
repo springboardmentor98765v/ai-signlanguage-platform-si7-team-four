@@ -150,13 +150,21 @@ class Notification(Base):
     Database-backed Notifications table.
     Stores all platform notifications for users, supports
     create, list (by user), and mark-as-read operations.
+
+    NOTE: id/user_id are stored as String(36) UUIDs (not the PostgreSQL
+    UUID(as_uuid=False) type used elsewhere) because the app runs on SQLite,
+    whose NUMERIC column affinity converts all-numeric UUID hex strings into
+    floats, corrupting/breaking reads. String(36) stores the same UUID text
+    safely on SQLite while remaining a real ForeignKey to users.id.
     """
     __tablename__ = "notifications"
 
     id = Column(String(36), primary_key=True, default=new_id)
-    user_id = Column(String(36), nullable=False, index=True)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     title = Column(String(200), nullable=False)
     message = Column(Text, nullable=False)
-    notification_type = Column(String(20), nullable=False, default="info")
+    event_type = Column(String(50), nullable=False, default="info")
     is_read = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    user = relationship("User", backref="notifications")

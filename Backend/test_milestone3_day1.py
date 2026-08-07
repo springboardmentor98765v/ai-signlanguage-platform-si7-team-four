@@ -88,39 +88,32 @@ def test_milestone1_2_gesture_and_progress():
 # ==============================================================================
 
 def test_milestone3_notification_service():
-    """Test Notification Service: Create, List, Unread Count, Mark Read, Delete."""
-    user_id = "test_notif_user_99"
+    """Test Notification Service: Create, List, Mark Read."""
+    user_id = "10000000-0000-0000-0000-000000000099"
 
     # 1. Create Notification
     create_res = client.post("/api/notifications", json={
         "user_id": user_id,
-        "title": "Day 1 Standup Alert",
+        "title": "Day 2 Standup Alert",
         "message": "Milestone 3 plan approved by team.",
-        "notification_type": "info"
+        "event_type": "info"
     })
     assert create_res.status_code == 201
     notif = create_res.json()
-    notif_id = notif["id"]   # Day 2: DB-backed field is 'id'
+    notif_id = notif["id"]
     assert notif["is_read"] is False
+    assert notif["event_type"] == "info"
 
-    # 2. Get Unread Count
-    count_res = client.get(f"/api/notifications/unread-count?user_id={user_id}")
-    assert count_res.status_code == 200
-    assert count_res.json()["unread_count"] >= 1
-
-    # 3. List My Notifications (Day 2: /me endpoint)
-    list_res = client.get(f"/api/notifications/me?user_id={user_id}")
+    # 2. List My Notifications (GET /{user_id}, newest first)
+    list_res = client.get(f"/api/notifications/{user_id}")
     assert list_res.status_code == 200
     assert len(list_res.json()) >= 1
 
-    # 4. Mark Read
+    # 3. Mark Read
     read_res = client.patch(f"/api/notifications/{notif_id}/read")
     assert read_res.status_code == 200
-    assert read_res.json()["notification_id"] == notif_id
-
-    # 5. Delete Notification
-    del_res = client.delete(f"/api/notifications/{notif_id}")
-    assert del_res.status_code == 200
+    assert read_res.json()["id"] == notif_id
+    assert read_res.json()["is_read"] is True
 
 
 def test_milestone3_bulk_admin_actions():
