@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models import models
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List
 import uuid
 
@@ -27,9 +27,14 @@ class PracticeStartRequest(BaseModel):
 
 # Schema representing mock real-time image frame landmarks
 class LandmarkPoint(BaseModel):
-    x: float
-    y: float
-    z: float
+    x: float = Field(..., ge=-10.0, le=10.0)
+    y: float = Field(..., ge=-10.0, le=10.0)
+    z: float = Field(..., ge=-10.0, le=10.0)
+
+
+class FrameSubmissionRequest(BaseModel):
+    session_id: str = Field(..., min_length=1, max_length=80)
+    landmarks: List[LandmarkPoint] = Field(..., min_length=1, max_length=500)
 
 
 @router.post("/start")
@@ -43,10 +48,6 @@ def start_practice(
     """
     session = practice_service.start_session(db, user_id, lesson_id)
     return session
-
-class FrameSubmissionRequest(BaseModel):
-    session_id: str
-    landmarks: List[LandmarkPoint]
 
 @router.post("/start", status_code=status.HTTP_201_CREATED)
 def start_practice_session(payload: PracticeStartRequest, db: Session = Depends(get_db)):

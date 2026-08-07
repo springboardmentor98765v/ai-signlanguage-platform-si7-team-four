@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional
 import csv
 import io
@@ -8,6 +8,7 @@ import uuid
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.models import User, Lesson
+from app.utils.validation import ALLOWED_ROLES, ALLOWED_CATEGORIES, ALLOWED_DIFFICULTY, reject_malicious
 
 router = APIRouter(prefix="/api/admin", tags=["Admin Management"])
 
@@ -26,8 +27,18 @@ class StatusUpdateRequest(BaseModel):
     is_active: bool
 
 class RoleUpdateRequest(BaseModel):
-    target_email: str
-    new_role: str
+    target_email: str = Field(..., min_length=1, max_length=180)
+    new_role: str = Field(..., max_length=20)
+
+    @field_validator("new_role")
+    @classmethod
+    def _validate_role(cls, value: str) -> str:
+        reject_malicious(value)
+        if value not in ALLOWED_ROLES:
+            raise ValueError(
+                f"new_role must be one of: {sorted(ALLOWED_ROLES)} (got '{value}')."
+            )
+        return value
 
 @router.get("/users", status_code=status.HTTP_200_OK)
 def list_all_users(admin_email: str, db: Session = Depends(get_db)):
@@ -92,7 +103,17 @@ class BulkStatusRequest(BaseModel):
 
 class BulkRoleRequest(BaseModel):
     user_ids: List[str]
-    new_role: str
+    new_role: str = Field(..., max_length=20)
+
+    @field_validator("new_role")
+    @classmethod
+    def _validate_role(cls, value: str) -> str:
+        reject_malicious(value)
+        if value not in ALLOWED_ROLES:
+            raise ValueError(
+                f"new_role must be one of: {sorted(ALLOWED_ROLES)} (got '{value}')."
+            )
+        return value
 
 @router.post("/users/bulk-delete", status_code=status.HTTP_200_OK)
 def bulk_delete_users(data: BulkDeleteRequest, admin_email: Optional[str] = None, db: Session = Depends(get_db)):
@@ -253,14 +274,32 @@ async def bulk_upload_lessons(
         reasons = []
         if not title:
             reasons.append("missing title")
+        else:
+            try:
+                reject_malicious(title)
+            except ValueError as exc:
+                reasons.append(str(exc))
         if not expected_gesture:
             reasons.append("missing expected_gesture")
         elif len(expected_gesture) > 5:
             reasons.append(f"expected_gesture too long ({len(expected_gesture)} > 5)")
+        if description:
+            try:
+                reject_malicious(description)
+            except ValueError as exc:
+                reasons.append(str(exc))
         if not category:
             reasons.append("missing category")
+        elif category.lower() not in ALLOWED_CATEGORIES:
+            reasons.append(
+                f"category '{category}' not in allowed set: {sorted(ALLOWED_CATEGORIES)}"
+            )
         if not difficulty:
             reasons.append("missing difficulty")
+        elif difficulty.lower() not in ALLOWED_DIFFICULTY:
+            reasons.append(
+                f"difficulty '{difficulty}' not in allowed set: {sorted(ALLOWED_DIFFICULTY)}"
+            )
         if not module_id:
             reasons.append("missing module_id")
         else:

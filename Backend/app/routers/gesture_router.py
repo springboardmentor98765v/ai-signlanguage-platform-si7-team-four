@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from typing import List
 import shutil
 import os
 
 from app.db.database import get_db
 from app.models import models
+from app.utils.validation import reject_malicious
 
 router = APIRouter(prefix="/api/v1/day3", tags=["Day 3 Core Features"])
 
@@ -15,8 +16,13 @@ UPLOAD_DIR = "app/static/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 class SignSubmission(BaseModel):
-    sign_text: str
+    sign_text: str = Field(..., min_length=1, max_length=200)
     user_id: int
+
+    @field_validator("sign_text")
+    @classmethod
+    def _reject_malicious_text(cls, value: str) -> str:
+        return reject_malicious(value)
 
 class EvaluationResponse(BaseModel):
     success: bool

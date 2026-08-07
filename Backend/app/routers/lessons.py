@@ -1,9 +1,10 @@
 from fastapi import APIRouter, HTTPException, status, Query, Depends, UploadFile, File
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 import csv
 import io
 from app.utils.security import verify_token_and_role
+from app.utils.validation import ALLOWED_CATEGORIES, ALLOWED_DIFFICULTY, reject_malicious
 
 router = APIRouter(prefix="/api/lessons", tags=["Lessons Service"])
 
@@ -18,15 +19,45 @@ class LessonResponse(BaseModel):
     difficulty: Optional[str] = "Easy"
 
 class LessonCreate(BaseModel):
-    module_id: str
-    title: str
-    content_description: Optional[str] = None
-    expected_gesture: str
+    module_id: str = Field(..., min_length=1, max_length=36)
+    title: str = Field(..., min_length=1, max_length=150)
+    content_description: Optional[str] = Field(None, max_length=2000)
+    expected_gesture: str = Field(..., min_length=1, max_length=5)
     category: Optional[str] = "Alphabet"
     difficulty: Optional[str] = "Easy"
 
+    @field_validator("module_id", "title", "content_description", "expected_gesture")
+    @classmethod
+    def _reject_malicious_text(cls, value):
+        if value is None:
+            return value
+        return reject_malicious(value)
+
+    @field_validator("category")
+    @classmethod
+    def _validate_category(cls, value):
+        if value and value.lower() not in ALLOWED_CATEGORIES:
+            raise ValueError(
+                f"category must be one of: {sorted(ALLOWED_CATEGORIES)} (got '{value}')."
+            )
+        return value
+
+    @field_validator("difficulty")
+    @classmethod
+    def _validate_difficulty(cls, value):
+        if value and value.lower() not in ALLOWED_DIFFICULTY:
+            raise ValueError(
+                f"difficulty must be one of: {sorted(ALLOWED_DIFFICULTY)} (got '{value}')."
+            )
+        return value
+
 class CSVBulkUploadPayload(BaseModel):
-    csv_content: str
+    csv_content: str = Field(..., max_length=1_000_000)
+
+    @field_validator("csv_content")
+    @classmethod
+    def _reject_malicious_text(cls, value: str) -> str:
+        return reject_malicious(value)
 
 # --- In-Memory Mock Datasets ---
 MOCK_LESSON_DB = {}

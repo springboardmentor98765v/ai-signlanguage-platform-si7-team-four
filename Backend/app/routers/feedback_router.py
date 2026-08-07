@@ -1,15 +1,22 @@
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List
 from datetime import datetime
+
+from app.utils.validation import reject_malicious
 
 router = APIRouter(prefix="/api/v1/feedback", tags=["Community Feedback & Support"])
 
 class FeedbackCreate(BaseModel):
     user_id: int
-    category: str = Field(..., description="E.g., Gesture Recognition, Dictionary, General")
+    category: str = Field(..., max_length=50, description="E.g., Gesture Recognition, Dictionary, General")
     rating: int = Field(..., ge=1, le=5, description="Rating scale from 1 to 5")
-    comments: str
+    comments: str = Field(..., min_length=1, max_length=2000)
+
+    @field_validator("category", "comments")
+    @classmethod
+    def _reject_malicious_text(cls, value: str) -> str:
+        return reject_malicious(value)
 
 class FeedbackResponse(BaseModel):
     id: int
