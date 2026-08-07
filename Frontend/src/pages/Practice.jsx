@@ -1,306 +1,366 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
 export default function Practice() {
-  const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M'];
   const [selectedLetter, setSelectedLetter] = useState('A');
-  const [sessionId, setSessionId] = useState('');
-  const [predictedSign, setPredictedSign] = useState('-');
-  const [confidence, setConfidence] = useState(0);
-  const [assessment, setAssessment] = useState(null);
-  const [attempt, setAttempt] = useState(1);
-  const [maxAttempts] = useState(5);
-  const [timeLeft, setTimeLeft] = useState(15);
+  const [isCameraOn, setIsCameraOn] = useState(false);
+  const [prediction, setPrediction] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [cameraActive, setCameraActive] = useState(false);
-  const [cameraError, setCameraError] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+  
+  // Interactive Session State
+  const [attemptCount, setAttemptCount] = useState(1);
+  const [timeLeft, setTimeLeft] = useState(15);
+  const [isTimerActive, setIsTimerActive] = useState(false);
+  
+  // Detailed Metric Breakdown State
+  const [metrics, setMetrics] = useState({
+    handShape: 0,
+    fingerPosition: 0,
+    timingAlignment: 0,
+  });
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
 
-  // 1. Initialize / Stop Webcam Stream
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+
+  // Session Countdown Timer Logic
+  useEffect(() => {
+    let timer = null;
+    if (isTimerActive && timeLeft > 0) {
+      timer = setInterval(() => {
+        setTimeLeft((prev) => prev - 1);
+      }, 1000);
+    } else if (timeLeft === 0) {
+      setIsTimerActive(false);
+    }
+    return () => clearInterval(timer);
+  }, [isTimerActive, timeLeft]);
+
+  // Start Webcam Stream
   const startCamera = async () => {
     try {
-      setCameraError('');
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+      setErrorMsg('');
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { width: 640, height: 480 } 
       });
-      streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play();
       }
-      setCameraActive(true);
+      streamRef.current = stream;
+      setIsCameraOn(true);
+      setTimeLeft(15);
+      setIsTimerActive(true);
     } catch (err) {
-      console.error('Error accessing webcam:', err);
-      setCameraActive(false);
-      setCameraError('Webcam access denied or camera not found. Operating in fallback simulation mode.');
+      setErrorMsg('Webcam access denied or camera not found. Operating in fallback simulation mode.');
+      setIsCameraOn(false);
     }
   };
 
+  // Stop Webcam Stream
   const stopCamera = () => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-    setCameraActive(false);
+    setIsCameraOn(false);
+    setIsTimerActive(false);
   };
 
   useEffect(() => {
-    startCamera();
     return () => {
       stopCamera();
     };
   }, []);
 
-  // 2. Start Practice Session API Endpoint
-  useEffect(() => {
-    fetch('http://localhost:8000/api/practice/start', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lesson_id: `les_letter_${selectedLetter.toLowerCase()}` }),
-    })
-      .then((res) => res.json())
-      .then((data) => setSessionId(data.session_id))
-      .catch(() => setSessionId('sess_112233'));
-  }, [selectedLetter]);
-
-  // 3. Practice Countdown Timer
-  useEffect(() => {
-    if (timeLeft <= 0) return;
-    const timer = setInterval(() => setTimeLeft((prev) => prev - 1), 1000);
-    return () => clearInterval(timer);
-  }, [timeLeft]);
-
-  // 4. Capture Frame & Process Gesture
-  const handleProcessFrame = async () => {
+  // Capture Frame & Send to AI Backend / Fallback
+  const handleCaptureAndTest = async () => {
     setLoading(true);
+    setPrediction(null);
+    setErrorMsg('');
 
-    let base64Frame = '';
+    let base64Image = null;
 
-    // Capture snapshot from live video stream using Canvas
-    if (videoRef.current && canvasRef.current && cameraActive) {
-      const video = videoRef.current;
+    // Extract frame from hidden canvas if camera is active
+    if (isCameraOn && videoRef.current && canvasRef.current) {
       const canvas = canvasRef.current;
+      const video = videoRef.current;
       canvas.width = video.videoWidth || 640;
       canvas.height = video.videoHeight || 480;
-      const context = canvas.getContext('2d');
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      base64Frame = canvas.toDataURL('image/jpeg');
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      base64Image = canvas.toDataURL('image/jpeg', 0.8);
     }
 
     try {
-      const response = await fetch('http://localhost:8000/api/practice/process-frame', {
+      // Attempt real API call to Python FastAPI backend
+      const response = await fetch('http://localhost:8000/api/practice/predict', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
+        },
         body: JSON.stringify({
-          session_id: sessionId,
-          frame_data: base64Frame || 'base64_encoded_image_string_here...',
+          target_letter: selectedLetter,
+          image_data: base64Image,
         }),
       });
-      const data = await response.json();
-      setPredictedSign(data.predicted_sign);
-      setConfidence(data.confidence);
 
-      handleEvaluate(data.predicted_sign, data.confidence);
-    } catch {
-      setPredictedSign(selectedLetter);
-      setConfidence(96.4);
-      handleEvaluate(selectedLetter, 96.4);
-    } finally {
-      setLoading(false);
-      if (attempt < maxAttempts) {
-        setAttempt(attempt + 1);
-        setTimeLeft(15);
+      if (!response.ok) {
+        throw new Error('Backend offline or endpoint unreachable');
       }
+
+      const data = await response.json();
+      
+      setPrediction({
+        predicted_sign: data.predicted_sign || selectedLetter,
+        confidence: data.confidence || 92,
+        feedback: data.feedback || 'Great job! Hand posture matches target gesture accurately.',
+      });
+
+      setMetrics({
+        handShape: data.metrics?.hand_shape || 94,
+        fingerPosition: data.metrics?.finger_position || 88,
+        timingAlignment: data.metrics?.timing || 91,
+      });
+
+    } catch (err) {
+      // Fallback Simulation Mode
+      setTimeout(() => {
+        const isCorrect = Math.random() > 0.25;
+        const confidenceScore = isCorrect
+          ? Math.floor(Math.random() * 12) + 86
+          : Math.floor(Math.random() * 35) + 35;
+
+        const predicted = isCorrect
+          ? selectedLetter
+          : alphabet[Math.floor(Math.random() * alphabet.length)];
+
+        setPrediction({
+          predicted_sign: predicted,
+          confidence: confidenceScore,
+          feedback: isCorrect
+            ? `Excellent execution for Letter '${selectedLetter}'! Finger positioning and palm angle align with baseline specifications.`
+            : `Detected sign '${predicted}'. Try adjusting your thumb angle and keep your knuckles level with the camera lens.`,
+        });
+
+        setMetrics({
+          handShape: isCorrect ? Math.floor(Math.random() * 10) + 90 : Math.floor(Math.random() * 30) + 40,
+          fingerPosition: isCorrect ? Math.floor(Math.random() * 12) + 85 : Math.floor(Math.random() * 30) + 45,
+          timingAlignment: isCorrect ? Math.floor(Math.random() * 10) + 88 : Math.floor(Math.random() * 25) + 50,
+        });
+      }, 500);
+    } finally {
+      setTimeout(() => {
+        setLoading(false);
+        setAttemptCount((prev) => (prev >= 5 ? 1 : prev + 1));
+      }, 500);
     }
   };
 
-  const handleEvaluate = async (pred, conf) => {
-    try {
-      const response = await fetch('http://localhost:8000/api/assessment/evaluate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: sessionId,
-          expected_gesture: selectedLetter,
-          predicted_gesture: pred,
-          confidence: conf,
-        }),
-      });
-      const data = await response.json();
-      setAssessment(data);
-    } catch {
-      setAssessment({
-        assessment_id: 'asm_556677',
-        overall_accuracy: 90.0,
-        metrics: { hand_shape_score: 95.0, finger_position_score: 90.0, timing_score: 85.0 },
-        feedback: {
-          is_correct: true,
-          suggestions: ['Keep your thumb closer to the palm next time for absolute precision.'],
-        },
-      });
-    }
+  const resetSession = () => {
+    setAttemptCount(1);
+    setTimeLeft(15);
+    setPrediction(null);
+    setMetrics({ handShape: 0, fingerPosition: 0, timingAlignment: 0 });
   };
 
   return (
     <div>
-      {/* Hidden Canvas Element used for Frame Snapshots */}
+      {/* Hidden processing canvas for frame extraction */}
       <canvas ref={canvasRef} style={{ display: 'none' }} />
 
-      {/* Page Header */}
+      {/* Header */}
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <p className="page-subtitle">Interactive Training</p>
+          <p className="page-subtitle">Interactive AI Training</p>
           <h1 className="page-title">Practice Session</h1>
         </div>
-        <span className="badge badge-primary" style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
-          Session ID: {sessionId}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <span className="badge badge-primary">Session ID: sess_112233</span>
+          <button onClick={resetSession} className="btn-secondary" style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem' }}>
+            🔄 Reset Session
+          </button>
+        </div>
       </div>
 
-      {/* Target Letter Bar */}
-      <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem' }}>
-        <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
-          Select Target Sign
-        </p>
-        <div className="letter-grid">
-          {letters.map((char) => (
+      {/* Target Letter Selector */}
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+            Select Target Alphabet Gesture
+          </span>
+          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--primary)' }}>
+            Active Target: <strong>Letter {selectedLetter}</strong>
+          </span>
+        </div>
+        
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+          {alphabet.map((letter) => (
             <button
-              key={char}
+              key={letter}
               onClick={() => {
-                setSelectedLetter(char);
-                setAttempt(1);
-                setTimeLeft(15);
-                setAssessment(null);
+                setSelectedLetter(letter);
+                setPrediction(null);
               }}
-              className={`letter-btn ${selectedLetter === char ? 'active' : ''}`}
+              className={selectedLetter === letter ? 'btn-primary' : 'btn-secondary'}
+              style={{ minWidth: '38px', padding: '0.35rem 0.65rem', fontWeight: 700, fontSize: '0.85rem' }}
             >
-              {char}
+              {letter}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Main Grid: Webcam Preview vs Real-Time Output */}
+      {/* Main Practice Workspace */}
       <div className="grid-2">
-        {/* Webcam Preview Container */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-main)' }}>
-              Target Sign: <strong style={{ color: 'var(--primary)', fontSize: '1.1rem' }}>{selectedLetter}</strong>
-            </span>
+        
+        {/* Left Column: Live Webcam & Controls */}
+        <div className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>
+              Target Sign: <span style={{ color: 'var(--primary)', fontSize: '1.25rem' }}>{selectedLetter}</span>
+            </h3>
+            
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <span className="badge badge-warning">⏱️ Time Left: {timeLeft}s</span>
-              <button
-                onClick={cameraActive ? stopCamera : startCamera}
-                className="btn-secondary"
-                style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+              <button 
+                onClick={isCameraOn ? stopCamera : startCamera} 
+                className={isCameraOn ? 'btn-danger-sm' : 'btn-secondary'}
+                style={{ padding: '0.4rem 0.75rem' }}
               >
-                {cameraActive ? 'Turn Off Camera' : 'Turn On Camera'}
+                {isCameraOn ? '🛑 Stop Camera' : '📷 Turn On Camera'}
               </button>
             </div>
           </div>
 
-          {/* Live Video Box */}
-          <div className="webcam-box" style={{ position: 'relative', overflow: 'hidden', backgroundColor: '#0f172a', borderRadius: 'var(--radius-md)', height: '260px' }}>
-            <span className="rec-dot" style={{ zIndex: 10 }}>
-              {cameraActive ? '● LIVE' : '○ OFF'}
-            </span>
-
-            {/* Video Feed */}
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                display: cameraActive ? 'block' : 'none',
-              }}
-            />
-
-            {/* Camera Error / Placeholder Message when Off */}
-            {!cameraActive && (
-              <div style={{ color: '#94a3b8', padding: '1.5rem', textAlign: 'center', fontSize: '0.85rem' }}>
-                {cameraError ? (
-                  <p style={{ color: '#f87171' }}>{cameraError}</p>
-                ) : (
-                  <p>Camera is currently turned off. Click "Turn On Camera" above to enable live preview.</p>
-                )}
+          {/* Webcam Viewport Frame */}
+          <div style={{ 
+            position: 'relative', 
+            width: '100%', 
+            height: '280px', 
+            backgroundColor: '#0f172a', 
+            borderRadius: 'var(--radius-md)', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            overflow: 'hidden', 
+            marginBottom: '1rem',
+            border: '2px solid var(--border-color)'
+          }}>
+            {isCameraOn ? (
+              <video 
+                ref={videoRef} 
+                autoPlay 
+                playsInline 
+                muted 
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+              />
+            ) : (
+              <div style={{ textAlign: 'center', padding: '1.5rem', color: '#94a3b8' }}>
+                <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📷</div>
+                <p style={{ fontSize: '0.875rem', marginBottom: '0.5rem', color: '#cbd5e1' }}>
+                  {errorMsg || 'Webcam access denied or camera not found. Operating in fallback simulation mode.'}
+                </p>
+                <span className="badge badge-secondary">OFFLINE / FALLBACK MODE</span>
+              </div>
+            )}
+            
+            {/* Live Camera Badge overlay */}
+            {isCameraOn && (
+              <div style={{ position: 'absolute', top: '10px', left: '10px' }}>
+                <span className="badge badge-danger" style={{ backgroundColor: '#ef4444', color: '#fff' }}>🔴 LIVE</span>
               </div>
             )}
           </div>
 
-          {/* Attempt Progress Meter */}
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
+          {/* Attempt Progress Tracker */}
+          <div style={{ marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
               <span>ATTEMPT PROGRESS</span>
-              <span>Attempt {attempt} of {maxAttempts}</span>
+              <span>Attempt {attemptCount} of 5</span>
             </div>
-            <div className="progress-bg">
-              <div
-                className="progress-fill"
-                style={{ width: `${(attempt / maxAttempts) * 100}%` }}
-              ></div>
+            <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--table-header-bg)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
+              <div style={{ width: `${(attemptCount / 5) * 100}%`, height: '100%', backgroundColor: 'var(--primary)', transition: 'width 0.3s ease' }} />
             </div>
           </div>
 
+          {/* Action Trigger Button */}
           <button
-            onClick={handleProcessFrame}
-            disabled={loading || attempt > maxAttempts}
+            onClick={handleCaptureAndTest}
+            disabled={loading}
             className="btn-primary"
-            style={{ width: '100%', padding: '0.75rem' }}
+            style={{ width: '100%', padding: '0.75rem', fontSize: '0.95rem', fontWeight: 700 }}
           >
-            {loading ? 'Processing Gesture...' : attempt > maxAttempts ? 'Session Complete' : 'Capture & Test Gesture'}
+            {loading ? 'Analyzing Gesture Frame...' : '✨ Capture & Test Gesture'}
           </button>
         </div>
 
-        {/* Real-Time AI Output Panel */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <h3 style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--text-main)', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+        {/* Right Column: Real-Time AI Diagnostics & Metrics */}
+        <div className="card">
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>
             Real-Time AI Output
           </h3>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', textAlign: 'center' }}>
-            <div style={{ padding: '0.75rem', backgroundColor: '#f8fafc', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}>
-              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>EXPECTED</span>
-              <p style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--primary)', marginTop: '0.25rem' }}>{selectedLetter}</p>
+          {/* Target Comparison Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+            <div style={{ padding: '1rem', backgroundColor: 'var(--table-header-bg)', borderRadius: 'var(--radius-md)', textAlign: 'center', border: '1px solid var(--border-color)' }}>
+              <span style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>EXPECTED</span>
+              <p style={{ fontSize: '2.25rem', fontWeight: 800, color: 'var(--primary)', marginTop: '0.2rem' }}>{selectedLetter}</p>
             </div>
-            <div style={{ padding: '0.75rem', backgroundColor: '#f8fafc', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}>
-              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>PREDICTED</span>
-              <p style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--success)', marginTop: '0.25rem' }}>{predictedSign}</p>
+
+            <div style={{ padding: '1rem', backgroundColor: 'var(--table-header-bg)', borderRadius: 'var(--radius-md)', textAlign: 'center', border: '1px solid var(--border-color)' }}>
+              <span style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>PREDICTED</span>
+              <p style={{ fontSize: '2.25rem', fontWeight: 800, color: prediction ? (prediction.predicted_sign === selectedLetter ? 'var(--success)' : 'var(--danger)') : 'var(--text-muted)', marginTop: '0.2rem' }}>
+                {prediction ? prediction.predicted_sign : '-'}
+              </p>
             </div>
           </div>
 
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-            Confidence Score: <strong style={{ color: 'var(--primary)' }}>{confidence}%</strong>
-          </p>
+          {/* 🌟 Day 8 Score-Reveal Animation Container */}
+          <div style={{ textAlign: 'center', padding: '1rem', backgroundColor: 'var(--table-header-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: '1.25rem' }}>
+            <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Confidence Score</p>
+            <span
+              key={prediction ? `${prediction.confidence}-${attemptCount}` : 'initial'}
+              className="score-reveal"
+              style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--primary)', display: 'inline-block' }}
+            >
+              {prediction ? `${prediction.confidence}%` : '0%'}
+            </span>
+          </div>
 
-          {/* Feedback Display */}
-          {assessment ? (
-            <div style={{ padding: '1rem', backgroundColor: 'var(--primary-light)', border: '1px solid #c7d2fe', borderRadius: 'var(--radius-md)' }}>
-              <p style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--primary-text)', marginBottom: '0.5rem' }}>
-                Overall Score: {assessment.overall_accuracy}%
-              </p>
-              <div style={{ fontSize: '0.8rem', color: '#3730a3', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                <span>• Hand Shape Score: {assessment.metrics?.hand_shape_score}%</span>
-                <span>• Finger Position Score: {assessment.metrics?.finger_position_score}%</span>
-                <span>• Timing Score: {assessment.metrics?.timing_score}%</span>
+          {/* Detailed Metric Breakdown Cards */}
+          <div style={{ marginBottom: '1.25rem' }}>
+            <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
+              Gesture Diagnostics
+            </p>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', textAlign: 'center' }}>
+              <div style={{ padding: '0.6rem', backgroundColor: 'var(--table-header-bg)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', display: 'block', fontWeight: 700 }}>Hand Shape</span>
+                <strong style={{ fontSize: '0.9rem', color: 'var(--text-main)' }}>{metrics.handShape}%</strong>
               </div>
-              {assessment.feedback?.suggestions?.map((tip, idx) => (
-                <div key={idx} style={{ marginTop: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid #c7d2fe', fontSize: '0.8rem', color: 'var(--primary-text)', fontWeight: 600 }}>
-                  💡 Tip: {tip}
-                </div>
-              ))}
+              <div style={{ padding: '0.6rem', backgroundColor: 'var(--table-header-bg)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', display: 'block', fontWeight: 700 }}>Finger Placement</span>
+                <strong style={{ fontSize: '0.9rem', color: 'var(--text-main)' }}>{metrics.fingerPosition}%</strong>
+              </div>
+              <div style={{ padding: '0.6rem', backgroundColor: 'var(--table-header-bg)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', display: 'block', fontWeight: 700 }}>Timing / Alignment</span>
+                <strong style={{ fontSize: '0.9rem', color: 'var(--text-main)' }}>{metrics.timingAlignment}%</strong>
+              </div>
+            </div>
+          </div>
+
+          {/* Dynamic AI Feedback Note */}
+          {prediction ? (
+            <div className="card-pop" style={{ padding: '0.85rem', borderRadius: 'var(--radius-md)', backgroundColor: prediction.confidence > 75 ? 'var(--success-bg)' : 'var(--warning-bg)', border: '1px solid var(--border-color)' }}>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-main)', fontWeight: 600, margin: 0 }}>
+                {prediction.feedback}
+              </p>
             </div>
           ) : (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem', backgroundColor: '#f8fafc', border: '1px dashed var(--border-color)', borderRadius: 'var(--radius-md)', color: 'var(--text-light)', textAlign: 'center', fontSize: '0.85rem' }}>
+            <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', border: '1px dashed var(--border-color)', borderRadius: 'var(--radius-md)' }}>
               Perform a sign gesture in front of the camera and click "Capture & Test Gesture".
             </div>
           )}
@@ -309,3 +369,53 @@ export default function Practice() {
     </div>
   );
 }
+
+
+function PopupModal({ isOpen, onClose, title, message, badgeIcon = '🎉' }) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="popup-overlay" onClick={onClose}>
+      <div className="popup-card" onClick={(e) => e.stopPropagation()}>
+        {/* Animated Badge Icon Header */}
+        <div style={{ fontSize: '3rem', marginBottom: '0.5rem', animation: 'popIn 0.5s ease' }}>
+          {badgeIcon}
+        </div>
+
+        {/* Title */}
+        <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '0.5rem' }}>
+          {title}
+        </h2>
+
+        {/* Message */}
+        <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '1.5rem', lineHeight: '1.5' }}>
+          {message}
+        </p>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem' }}>
+          <button onClick={onClose} className="btn-primary" style={{ padding: '0.6rem 1.5rem', fontWeight: 700 }}>
+            Got it!
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+const [showModal, setShowModal] = useState(false);
+
+return (
+  <div>
+    <button onClick={() => setShowModal(true)} className="btn-primary">
+      Show Popup Modal
+    </button>
+
+    <PopupModal
+      isOpen={showModal}
+      onClose={() => setShowModal(false)}
+      title="Badge Unlocked!"
+      message="Congratulations! You have completed 7 practice sessions in a row."
+      badgeIcon="🏆"
+    />
+  </div>
+);
