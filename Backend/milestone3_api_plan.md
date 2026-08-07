@@ -116,14 +116,22 @@ curl against `http://127.0.0.1:8000`.
 - `POST /api/admin/users/bulk-delete` - delete array of `user_ids` (already implemented; re-test + harden).
 - `PATCH /api/admin/users/bulk-status` - activate/deactivate many users (implemented; re-test + harden).
 - `PATCH /api/admin/users/bulk-role` - change role for many users (implemented; re-test + harden).
+- **Day 4 (built):** `POST /api/admin/bulk-user-status` - accepts a list of user IDs *or emails*
+  plus `is_active`; updates all in one call; returns `updated_count`, `updated_user_ids`,
+  `not_found`. Uses `verify_admin()` dependency. Requires the `is_active` column on `User`
+  (added Day 4).
 - Day 2 hardening: require JWT `Admin` role (remove `admin_email` query param), validate IDs
   as UUIDs, cap batch size (e.g. 500).
 
 ### D. CSV bulk lesson upload
 - `POST /api/lessons/bulk-upload-csv` (implemented) - parse CSV string, create lessons in batch.
-- Day 2 hardening: accept `UploadFile` as well as raw string, enforce header contract
-  `module_id,title,content_description,expected_gesture,category,difficulty`, return per-row
-  errors, cap rows (e.g. 1000).
+- **Day 4 (built):** `POST /api/admin/bulk-upload-lessons` - accepts an uploaded CSV file
+  (`UploadFile`), parses with Python's built-in `csv` module (no paid tools per SRS), validates
+  `title,description,expected_gesture,category,difficulty,module_id`, inserts valid `Lesson`
+  rows in bulk, and returns `rows_processed` / `rows_inserted` / `rows_rejected` (with per-row
+  reasons). Uses `verify_admin()` dependency.
+- Sample file: `Backend/sample_data/sample_lessons.csv` (6 valid lessons).
+- Day 2 hardening: enforce header contract, return per-row errors, cap rows (e.g. 1000).
 
 ### E. Stronger input validation across existing endpoints
 - Add Pydantic constraints (`min_length`, `max_length`, pattern) to auth/profile schemas
