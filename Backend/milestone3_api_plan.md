@@ -2,6 +2,63 @@
 
 Status: **Approved** (treat as complete plan for the milestone). Date: 2026-08-07.
 
+> ## API FREEZE - Milestone 3 (Day 10, 2026-08-08)
+>
+> **The backend API surface is FROZEN for Milestone 3.** No new endpoints, schema changes,
+> or breaking response-shape changes may be added for the rest of M3 without a cross-team
+> review. Changes to route paths, request bodies, or response fields are **breaking**.
+> The authoritative source of truth is the live OpenAPI spec at
+> `http://127.0.0.1:8000/openapi.json` (Swagger UI: `/docs`).
+>
+> Every endpoint added or changed this milestone (frozen surface):
+>
+> | # | Method | Path | Purpose |
+> | :--- | :--- | :--- | :--- |
+> | 1 | POST | `/api/auth/register` | Create a user account (bcrypt-hashed password, rate-limited 5/min/email). |
+> | 2 | POST | `/api/auth/login` | Validate credentials, issue access + refresh tokens (rate-limited 5/min/email). |
+> | 3 | POST | `/api/auth/refresh-token` | Exchange a refresh token for a fresh access token. |
+> | 4 | GET | `/api/auth/dashboard/learner` | RBAC learner dashboard (Bearer token, role Learner/Admin). |
+> | 5 | GET | `/api/auth/dashboard/instructor` | RBAC instructor dashboard (Bearer token, role Instructor/Admin). |
+> | 6 | POST | `/api/notifications` | Create a notification (service-to-service / internal hooks). |
+> | 7 | GET | `/api/notifications/{user_id}` | List a user's notifications, newest first. |
+> | 8 | PATCH | `/api/notifications/{notification_id}/read` | Mark a notification as read. |
+> | 9 | GET | `/api/admin/users` | List all users (admin_email query param). |
+> | 10 | PATCH | `/api/admin/user-status` | Activate/deactivate one user. |
+> | 11 | PATCH | `/api/admin/user-role` | Change one user's role. |
+> | 12 | DELETE | `/api/admin/users/{user_id}` | Delete one user by ID. |
+> | 13 | POST | `/api/admin/users/bulk-delete` | Bulk-delete users by ID array. |
+> | 14 | PATCH | `/api/admin/users/bulk-status` | Bulk set active/inactive by ID array. |
+> | 15 | PATCH | `/api/admin/users/bulk-role` | Bulk change roles by ID array. |
+> | 16 | POST | `/api/admin/bulk-user-status` | Bulk activate/deactivate by UUID or email. |
+> | 17 | POST | `/api/admin/bulk-upload-lessons` | Bulk-insert lessons from an uploaded CSV file (multipart). |
+> | 18 | POST | `/api/practice/start` | Start a practice session (user_id + lesson_id). |
+> | 19 | POST | `/api/practice/end` | End a practice session, record duration. |
+> | 20 | POST | `/api/practice/submit` | Submit landmarks, get mock AI feedback + score. |
+> | 21 | GET | `/api/courses/modules` | List all course modules (with nested lessons). |
+> | 22 | GET | `/api/courses/modules/{module_id}/lessons` | List lessons within a module. |
+> | 23 | POST | `/api/courses/modules` | Create a custom module (RBAC Instructor/Admin). |
+> | 24 | GET | `/api/lessons` | List lessons (paginated, searchable). |
+> | 25 | POST | `/api/lessons` | Create a custom lesson (RBAC Instructor/Admin). |
+> | 26 | GET | `/api/lessons/advanced` | List advanced lessons. |
+> | 27 | GET | `/api/lessons/{lesson_id}` | Get a lesson by ID. |
+> | 28 | PUT | `/api/lessons/{lesson_id}` | Update a lesson (RBAC Instructor/Admin). |
+> | 29 | DELETE | `/api/lessons/{lesson_id}` | Delete a lesson (RBAC Instructor/Admin). |
+> | 30 | POST | `/api/lessons/bulk-upload-csv` | Bulk-upload lessons via a JSON CSV-string payload. |
+> | 31 | GET | `/health` | Health check (boot/readiness). |
+> | 32 | GET | `/` | Root/launch status. |
+>
+> **Documented as pending Intern 4 (Business Logic) integration** (NOT part of the frozen API,
+> not registered in `app/main.py`):
+> - `app/routers/analytics.py` + `app/services/analytics_service.py` - learner analytics router
+>   exists but is **not registered**; its data source is a placeholder returning `[]`.
+>   Real analytics (DB-backed accuracy/weak-letters/weekly trends) is owned by Intern 4.
+> - Badge/certificate/recommendation **event hooks** are live integration points
+>   (`assessment_service.assess`, `certificate_service.generate_certificate_pdf`,
+>   `recommendation_service.generate_recommendations` call `create_notification(...)`), but
+>   badge/certificate **eligibility policy** is owned by Intern 4's business-logic layer.
+> - Auth dashboard metrics (`accuracy_metric_stub`, `lessons_completed_stub`, etc.) are demo
+>   stubs pending Intern 4's analytics service.
+
 ---
 
 ## 1. Inventory of Existing Milestone 1 & 2 APIs
@@ -288,3 +345,53 @@ Wiring status (Day 3):
 - [x] Old APIs re-tested to confirm they still work (results in section 2; practice endpoints
       documented as known defects for Day 2)
 - [x] Plan is complete and internally consistent - approved
+
+---
+
+## 5. Day 10 - Final Integration Notes
+
+### 5.1 Full automated test suite - PASSING
+
+- Final run: `pytest Backend/ -v` from repo root -> **84 passed** (previously 80 after Days 6-7,
+  plus 4 full-journey integration tests from Day 8). Command used for the Day 10 walkthrough:
+  `python3 -m pytest Backend/ -q` and `python3 -m pytest Backend/ -v`.
+- Warning cleanup: registered the `integration` pytest marker in `Backend/pytest.ini`
+  (removes the `PytestUnknownMarkWarning` from the Day-8 journey tests).
+
+### 5.2 End-to-end boot check - PASSING
+
+- `uvicorn app.main:app` boots cleanly (no exceptions in the boot log).
+- `GET /health` -> `200 {"status": "healthy", "env_loaded": true, "api_status": "frozen_production_ready", ...}`.
+- `GET /docs` -> 200; `/openapi.json` exposes 44 registered paths (matches section 1 inventory).
+- `docker-compose.yml` parses cleanly (postgres + backend + ai-service). Docker itself is not
+  installed in this dev environment, so live `docker compose up` could not be executed here;
+  the equivalent local boot above is backend's contribution to the Day 10 integration walkthrough.
+- The full-journey integration tests (`Backend/test_integration_journeys.py`) double as the
+  documented end-to-end walkthrough: register -> login -> lessons -> practice start/end/submit ->
+  notification -> admin bulk actions.
+
+### 5.3 Last-minute critical bugs found & fixed on Day 10
+
+1. **Dead, broken `PracticeService` class in `practice_service.py`** - leftover from an earlier
+   day. `PracticeService.create_session(...)` referenced a `score` column that does not exist on
+   `PracticeSession` (would raise at runtime) and was typed for int IDs while the schema uses
+   UUIDs. It was never referenced by any router or test. **Removed** (dead code, no behavior change).
+2. **Unregistered pytest marker warning** - `@pytest.mark.integration` (Day 8) triggered
+   `PytestUnknownMarkWarning`. **Fixed** by registering the marker in `Backend/pytest.ini`.
+3. **Stale `/health` milestone tracker** - reported `milestone_3: "Day 2 Complete"` at the freeze.
+   **Fixed** to `"Day 10 Complete - API FROZEN"` (display-only; no test asserted the old value).
+4. **Unused dead schema** - `BulkUploadLessonsRequestExample` in `schemas/admin.py` (added Day 9,
+   never used). **Removed**.
+5. **Documented, not code-changed**: orphaned `analytics.py` router + `analytics_service.py`
+   placeholder (`[]` data source) is **not registered** in `app/main.py`; real learner analytics
+   is pending Intern 4 integration (see API Freeze note above). Confirmed the Day-3 notification
+   event hooks (`badge_earned`, `certificate_ready`, `new_recommendation`) are fully wired in
+   `assessment_service`, `certificate_service`, `recommendation_service` and are tested in
+   `Backend/test_milestone3_day3.py`.
+
+### 5.4 Backend contribution to the Day 10 integration walkthrough
+
+- Backend provides: live Swagger UI `/docs`, the frozen `/openapi.json`, the cross-team
+  contract in `Backend/docs/frontend_integration_notes.md`, and 84 green tests covering the
+  full M3 surface (auth, RBAC dashboards, notifications, admin bulk + CSV upload, practice,
+  rate limiting 429, and 4 full-journey flows).

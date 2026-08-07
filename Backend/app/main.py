@@ -115,7 +115,7 @@ def health_check():
         "milestone_tracker": {
             "milestone_1": "Complete",
             "milestone_2": "Complete",
-            "milestone_3": "Day 2 Complete"
+            "milestone_3": "Day 10 Complete - API FROZEN"
         }
     }
  

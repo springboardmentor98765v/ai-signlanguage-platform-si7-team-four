@@ -74,10 +74,3 @@ class BulkUploadLessonsResponse(BaseModel):
     rows_inserted: int
     rows_rejected: int
     rejected_rows: List[RejectedLessonRow]
-
-
-class BulkUploadLessonsRequestExample(BaseModel):
-    """Documentation helper describing the multipart form fields (CSV file + admin_email)."""
-
-    file: str = Field(..., description="Uploaded .csv file with header: title,description,expected_gesture,category,difficulty,module_id")
-    admin_email: str = Field("", description="Email of the admin performing the upload.")
