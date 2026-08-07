@@ -1,17 +1,59 @@
 import React, { useState, useRef, useEffect } from 'react';
 
+// ============================================================================
+// Reusable Spring-Bounce Popup Modal Component
+// ============================================================================
+function PopupModal({ isOpen, onClose, title, message, badgeIcon = '🎉' }) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="popup-overlay" onClick={onClose}>
+      <div className="popup-card" onClick={(e) => e.stopPropagation()}>
+        <div style={{ fontSize: '3rem', marginBottom: '0.5rem', animation: 'popIn 0.5s ease' }}>
+          {badgeIcon}
+        </div>
+        <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '0.5rem' }}>
+          {title}
+        </h2>
+        <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '1.5rem', lineHeight: '1.5' }}>
+          {message}
+        </p>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem' }}>
+          <button onClick={onClose} className="btn-primary" style={{ padding: '0.6rem 1.5rem', fontWeight: 700 }}>
+            Awesome! Continue Practice
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// Main Interactive Practice View
+// ============================================================================
 export default function Practice() {
+  // Target Selection State
+  const [selectedCategory, setSelectedCategory] = useState('alphabets');
   const [selectedLetter, setSelectedLetter] = useState('A');
+  
+  // Camera & Video Frame Capture State
   const [isCameraOn, setIsCameraOn] = useState(false);
-  const [prediction, setPrediction] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [cameraLoading, setCameraLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   
   // Interactive Session State
   const [attemptCount, setAttemptCount] = useState(1);
-  const [timeLeft, setTimeLeft] = useState(15);
+  const [maxAttempts] = useState(5);
+  const [timeLeft, setTimeLeft] = useState(30);
   const [isTimerActive, setIsTimerActive] = useState(false);
+  const [streakCount, setStreakCount] = useState(7);
   
+  // AI Diagnostics State
+  const [loading, setLoading] = useState(false);
+  const [prediction, setPrediction] = useState(null);
+  const [showPopup, setShowPopup] = useState(false);
+  const [modalData, setModalData] = useState({ title: '', message: '', icon: '🏆' });
+
   // Detailed Metric Breakdown State
   const [metrics, setMetrics] = useState({
     handShape: 0,
@@ -24,8 +66,11 @@ export default function Practice() {
   const streamRef = useRef(null);
 
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  const numbers = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
 
-  // Session Countdown Timer Logic
+  // --------------------------------------------------------------------------
+  // Countdown Timer Hook
+  // --------------------------------------------------------------------------
   useEffect(() => {
     let timer = null;
     if (isTimerActive && timeLeft > 0) {
@@ -34,31 +79,36 @@ export default function Practice() {
       }, 1000);
     } else if (timeLeft === 0) {
       setIsTimerActive(false);
+      setErrorMsg('Practice session timed out. Click "Reset Session" to start fresh.');
     }
     return () => clearInterval(timer);
   }, [isTimerActive, timeLeft]);
 
-  // Start Webcam Stream
+  // --------------------------------------------------------------------------
+  // Camera Initialization & Cleanup
+  // --------------------------------------------------------------------------
   const startCamera = async () => {
+    setCameraLoading(true);
+    setErrorMsg('');
     try {
-      setErrorMsg('');
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { width: 640, height: 480 } 
+        video: { width: 640, height: 480, facingMode: 'user' } 
       });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
       streamRef.current = stream;
       setIsCameraOn(true);
-      setTimeLeft(15);
+      setTimeLeft(30);
       setIsTimerActive(true);
     } catch (err) {
       setErrorMsg('Webcam access denied or camera not found. Operating in fallback simulation mode.');
       setIsCameraOn(false);
+    } finally {
+      setCameraLoading(false);
     }
   };
 
-  // Stop Webcam Stream
   const stopCamera = () => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
@@ -74,7 +124,9 @@ export default function Practice() {
     };
   }, []);
 
-  // Capture Frame & Send to AI Backend / Fallback
+  // --------------------------------------------------------------------------
+  // Frame Processing & AI Prediction Call
+  // --------------------------------------------------------------------------
   const handleCaptureAndTest = async () => {
     setLoading(true);
     setPrediction(null);
@@ -82,7 +134,6 @@ export default function Practice() {
 
     let base64Image = null;
 
-    // Extract frame from hidden canvas if camera is active
     if (isCameraOn && videoRef.current && canvasRef.current) {
       const canvas = canvasRef.current;
       const video = videoRef.current;
@@ -94,7 +145,6 @@ export default function Practice() {
     }
 
     try {
-      // Attempt real API call to Python FastAPI backend
       const response = await fetch('http://localhost:8000/api/practice/predict', {
         method: 'POST',
         headers: {
@@ -108,41 +158,54 @@ export default function Practice() {
       });
 
       if (!response.ok) {
-        throw new Error('Backend offline or endpoint unreachable');
+        throw new Error('Backend server unreachable');
       }
 
       const data = await response.json();
       
-      setPrediction({
+      const newPrediction = {
         predicted_sign: data.predicted_sign || selectedLetter,
         confidence: data.confidence || 92,
         feedback: data.feedback || 'Great job! Hand posture matches target gesture accurately.',
-      });
+      };
 
+      setPrediction(newPrediction);
       setMetrics({
         handShape: data.metrics?.hand_shape || 94,
         fingerPosition: data.metrics?.finger_position || 88,
         timingAlignment: data.metrics?.timing || 91,
       });
 
+      if (newPrediction.confidence > 85) {
+        setModalData({
+          title: 'High Accuracy Achieved!',
+          message: `Incredible precision! You matched Sign '${selectedLetter}' with over ${newPrediction.confidence}% confidence.`,
+          icon: '🏆'
+        });
+        setShowPopup(true);
+      }
+
     } catch (err) {
-      // Fallback Simulation Mode
+      // Fallback Simulation Engine
       setTimeout(() => {
         const isCorrect = Math.random() > 0.25;
         const confidenceScore = isCorrect
           ? Math.floor(Math.random() * 12) + 86
           : Math.floor(Math.random() * 35) + 35;
 
+        const activeSet = selectedCategory === 'alphabets' ? alphabet : numbers;
         const predicted = isCorrect
           ? selectedLetter
-          : alphabet[Math.floor(Math.random() * alphabet.length)];
+          : activeSet[Math.floor(Math.random() * activeSet.length)];
+
+        const feedbackMsg = isCorrect
+          ? `Excellent execution for '${selectedLetter}'! Finger positioning and palm angle align with target standards.`
+          : `Detected sign '${predicted}'. Try adjusting your thumb angle and keep your knuckles level with the lens.`;
 
         setPrediction({
           predicted_sign: predicted,
           confidence: confidenceScore,
-          feedback: isCorrect
-            ? `Excellent execution for Letter '${selectedLetter}'! Finger positioning and palm angle align with baseline specifications.`
-            : `Detected sign '${predicted}'. Try adjusting your thumb angle and keep your knuckles level with the camera lens.`,
+          feedback: feedbackMsg,
         });
 
         setMetrics({
@@ -150,73 +213,110 @@ export default function Practice() {
           fingerPosition: isCorrect ? Math.floor(Math.random() * 12) + 85 : Math.floor(Math.random() * 30) + 45,
           timingAlignment: isCorrect ? Math.floor(Math.random() * 10) + 88 : Math.floor(Math.random() * 25) + 50,
         });
-      }, 500);
+
+        if (confidenceScore > 85) {
+          setModalData({
+            title: 'High Accuracy Achieved!',
+            message: `Incredible precision! You matched Sign '${selectedLetter}' with ${confidenceScore}% confidence.`,
+            icon: '🏆'
+          });
+          setShowPopup(true);
+        }
+      }, 600);
     } finally {
       setTimeout(() => {
         setLoading(false);
-        setAttemptCount((prev) => (prev >= 5 ? 1 : prev + 1));
-      }, 500);
+        setAttemptCount((prev) => (prev >= maxAttempts ? 1 : prev + 1));
+      }, 600);
     }
   };
 
   const resetSession = () => {
     setAttemptCount(1);
-    setTimeLeft(15);
+    setTimeLeft(30);
     setPrediction(null);
+    setErrorMsg('');
     setMetrics({ handShape: 0, fingerPosition: 0, timingAlignment: 0 });
+    if (isCameraOn) setIsTimerActive(true);
   };
 
   return (
     <div>
-      {/* Hidden processing canvas for frame extraction */}
+      {/* Hidden processing canvas for base64 extraction */}
       <canvas ref={canvasRef} style={{ display: 'none' }} />
 
-      {/* Header */}
+      {/* Spring-Bounce Popup Component */}
+      <PopupModal
+        isOpen={showPopup}
+        onClose={() => setShowPopup(false)}
+        title={modalData.title}
+        message={modalData.message}
+        badgeIcon={modalData.icon}
+      />
+
+      {/* Page Header Bar */}
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <p className="page-subtitle">Interactive AI Training</p>
-          <h1 className="page-title">Practice Session</h1>
+          <p className="page-subtitle">Interactive AI Gesture Recognition</p>
+          <h1 className="page-title">Practice Workspace</h1>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <span className="streak-pill">🔥 {streakCount} Day Practice Streak</span>
           <span className="badge badge-primary">Session ID: sess_112233</span>
-          <button onClick={resetSession} className="btn-secondary" style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem' }}>
+          <button onClick={resetSession} className="btn-secondary" style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}>
             🔄 Reset Session
           </button>
         </div>
       </div>
 
-      {/* Target Letter Selector */}
+      {/* Target Selector Toolbar */}
       <div className="card" style={{ marginBottom: '1.5rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-            Select Target Alphabet Gesture
-          </span>
-          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--primary)' }}>
-            Active Target: <strong>Letter {selectedLetter}</strong>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              onClick={() => { setSelectedCategory('alphabets'); setSelectedLetter('A'); setPrediction(null); }}
+              className={selectedCategory === 'alphabets' ? 'btn-primary' : 'btn-secondary'}
+              style={{ padding: '0.4rem 0.85rem', fontSize: '0.8rem' }}
+            >
+              🔤 Alphabets (A-Z)
+            </button>
+            <button
+              onClick={() => { setSelectedCategory('numbers'); setSelectedLetter('1'); setPrediction(null); }}
+              className={selectedCategory === 'numbers' ? 'btn-primary' : 'btn-secondary'}
+              style={{ padding: '0.4rem 0.85rem', fontSize: '0.8rem' }}
+            >
+              🔢 Numbers (1-10)
+            </button>
+          </div>
+
+          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--primary)' }}>
+            Active Target: <strong>Sign '{selectedLetter}'</strong>
           </span>
         </div>
         
+        {/* Sign Selection Buttons Grid */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-          {alphabet.map((letter) => (
+          {(selectedCategory === 'alphabets' ? alphabet : numbers).map((item) => (
             <button
-              key={letter}
+              key={item}
               onClick={() => {
-                setSelectedLetter(letter);
+                setSelectedLetter(item);
                 setPrediction(null);
               }}
-              className={selectedLetter === letter ? 'btn-primary' : 'btn-secondary'}
+              className={selectedLetter === item ? 'btn-primary' : 'btn-secondary'}
               style={{ minWidth: '38px', padding: '0.35rem 0.65rem', fontWeight: 700, fontSize: '0.85rem' }}
             >
-              {letter}
+              {item}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Main Practice Workspace */}
+      {/* Main Practice Columns */}
       <div className="grid-2">
         
-        {/* Left Column: Live Webcam & Controls */}
+        {/* Left Column: Live Stream & Controls */}
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>
@@ -224,18 +324,19 @@ export default function Practice() {
             </h3>
             
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span className="badge badge-warning">⏱️ Time Left: {timeLeft}s</span>
+              <span className="badge badge-warning">⏱️ {timeLeft}s Left</span>
               <button 
                 onClick={isCameraOn ? stopCamera : startCamera} 
+                disabled={cameraLoading}
                 className={isCameraOn ? 'btn-danger-sm' : 'btn-secondary'}
                 style={{ padding: '0.4rem 0.75rem' }}
               >
-                {isCameraOn ? '🛑 Stop Camera' : '📷 Turn On Camera'}
+                {cameraLoading ? 'Starting...' : isCameraOn ? '🛑 Stop Camera' : '📷 Turn On Camera'}
               </button>
             </div>
           </div>
 
-          {/* Webcam Viewport Frame */}
+          {/* Video Viewport Frame */}
           <div style={{ 
             position: 'relative', 
             width: '100%', 
@@ -259,18 +360,17 @@ export default function Practice() {
               />
             ) : (
               <div style={{ textAlign: 'center', padding: '1.5rem', color: '#94a3b8' }}>
-                <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📷</div>
+                <div style={{ fontSize: '2.25rem', marginBottom: '0.5rem' }}>📷</div>
                 <p style={{ fontSize: '0.875rem', marginBottom: '0.5rem', color: '#cbd5e1' }}>
-                  {errorMsg || 'Webcam access denied or camera not found. Operating in fallback simulation mode.'}
+                  {errorMsg || 'Webcam is currently off. Click "Turn On Camera" above.'}
                 </p>
-                <span className="badge badge-secondary">OFFLINE / FALLBACK MODE</span>
+                <span className="badge badge-secondary">OFFLINE / FALLBACK SIMULATION MODE</span>
               </div>
             )}
             
-            {/* Live Camera Badge overlay */}
             {isCameraOn && (
               <div style={{ position: 'absolute', top: '10px', left: '10px' }}>
-                <span className="badge badge-danger" style={{ backgroundColor: '#ef4444', color: '#fff' }}>🔴 LIVE</span>
+                <span className="badge badge-danger" style={{ backgroundColor: '#ef4444', color: '#fff' }}>🔴 LIVE FEED</span>
               </div>
             )}
           </div>
@@ -279,10 +379,10 @@ export default function Practice() {
           <div style={{ marginBottom: '1rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
               <span>ATTEMPT PROGRESS</span>
-              <span>Attempt {attemptCount} of 5</span>
+              <span>Attempt {attemptCount} of {maxAttempts}</span>
             </div>
             <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--table-header-bg)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
-              <div style={{ width: `${(attemptCount / 5) * 100}%`, height: '100%', backgroundColor: 'var(--primary)', transition: 'width 0.3s ease' }} />
+              <div style={{ width: `${(attemptCount / maxAttempts) * 100}%`, height: '100%', backgroundColor: 'var(--primary)', transition: 'width 0.3s ease' }} />
             </div>
           </div>
 
@@ -297,10 +397,10 @@ export default function Practice() {
           </button>
         </div>
 
-        {/* Right Column: Real-Time AI Diagnostics & Metrics */}
+        {/* Right Column: AI Predictions & Diagnostics */}
         <div className="card">
           <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>
-            Real-Time AI Output
+            Real-Time AI Diagnostic Output
           </h3>
 
           {/* Target Comparison Grid */}
@@ -318,7 +418,7 @@ export default function Practice() {
             </div>
           </div>
 
-          {/* 🌟 Day 8 Score-Reveal Animation Container */}
+          {/* Score Reveal Area */}
           <div style={{ textAlign: 'center', padding: '1rem', backgroundColor: 'var(--table-header-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: '1.25rem' }}>
             <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Confidence Score</p>
             <span
@@ -330,10 +430,10 @@ export default function Practice() {
             </span>
           </div>
 
-          {/* Detailed Metric Breakdown Cards */}
+          {/* Gesture Diagnostics Breakdown */}
           <div style={{ marginBottom: '1.25rem' }}>
             <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
-              Gesture Diagnostics
+              Detailed Gesture Diagnostics
             </p>
             
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', textAlign: 'center' }}>
@@ -352,7 +452,7 @@ export default function Practice() {
             </div>
           </div>
 
-          {/* Dynamic AI Feedback Note */}
+          {/* AI Feedback Banner */}
           {prediction ? (
             <div className="card-pop" style={{ padding: '0.85rem', borderRadius: 'var(--radius-md)', backgroundColor: prediction.confidence > 75 ? 'var(--success-bg)' : 'var(--warning-bg)', border: '1px solid var(--border-color)' }}>
               <p style={{ fontSize: '0.85rem', color: 'var(--text-main)', fontWeight: 600, margin: 0 }}>
@@ -369,53 +469,3 @@ export default function Practice() {
     </div>
   );
 }
-
-
-function PopupModal({ isOpen, onClose, title, message, badgeIcon = '🎉' }) {
-  if (!isOpen) return null;
-
-  return (
-    <div className="popup-overlay" onClick={onClose}>
-      <div className="popup-card" onClick={(e) => e.stopPropagation()}>
-        {/* Animated Badge Icon Header */}
-        <div style={{ fontSize: '3rem', marginBottom: '0.5rem', animation: 'popIn 0.5s ease' }}>
-          {badgeIcon}
-        </div>
-
-        {/* Title */}
-        <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '0.5rem' }}>
-          {title}
-        </h2>
-
-        {/* Message */}
-        <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '1.5rem', lineHeight: '1.5' }}>
-          {message}
-        </p>
-
-        {/* Actions */}
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem' }}>
-          <button onClick={onClose} className="btn-primary" style={{ padding: '0.6rem 1.5rem', fontWeight: 700 }}>
-            Got it!
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-const [showModal, setShowModal] = useState(false);
-
-return (
-  <div>
-    <button onClick={() => setShowModal(true)} className="btn-primary">
-      Show Popup Modal
-    </button>
-
-    <PopupModal
-      isOpen={showModal}
-      onClose={() => setShowModal(false)}
-      title="Badge Unlocked!"
-      message="Congratulations! You have completed 7 practice sessions in a row."
-      badgeIcon="🏆"
-    />
-  </div>
-);
