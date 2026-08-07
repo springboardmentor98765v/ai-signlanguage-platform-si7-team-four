@@ -103,7 +103,7 @@ app.include_router(lessons_router)
 app.include_router(course.router)
 app.include_router(practice.router)
 
-@app.get("/health", tags=["System Health & Status"])
+@app.get("/health", tags=["System Health & Status"], summary="Health Check", description="Confirm the backend is up and environment variables loaded.")
 def health_check():
     """
     Health check endpoint supporting GET to confirm backend status.
@@ -119,7 +119,7 @@ def health_check():
         }
     }
  
-@app.get("/", tags=["System Health Status"])
+@app.get("/", tags=["System Health & Status"], summary="Root / API Launch Status", description="Platform launch status and milestone tracker.")
 def read_root():
     """
     Root endpoint verifying platform launch status and milestone tracker.

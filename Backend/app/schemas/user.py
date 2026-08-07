@@ -35,3 +35,54 @@ class UserLogin(BaseModel):
     @classmethod
     def _reject_malicious_password(cls, value: str) -> str:
         return reject_malicious(value)
+
+
+# --- Response schemas (shown in Swagger /docs) ---
+
+class UserSummary(BaseModel):
+    """Identity fields embedded in auth responses."""
+
+    user_id: str
+    username: str
+    role: str
+
+
+class RegisterResponse(BaseModel):
+    """Response body for POST /api/auth/register."""
+
+    message: str
+    user_id: str
+    role: str
+
+
+class LoginResponse(BaseModel):
+    """Response body for POST /api/auth/login."""
+
+    message: str
+    access_token: str
+    refresh_token: str
+    token_type: str
+    user: UserSummary
+
+
+class RefreshTokenResponse(BaseModel):
+    """Response body for POST /api/auth/refresh-token."""
+
+    access_token: str
+    token_type: str
+    message: str
+
+
+class LearnerDashboardResponse(BaseModel):
+    """Response body for GET /api/auth/dashboard/learner."""
+
+    message: str
+    accuracy_metric_stub: str
+    lessons_completed_stub: int
+
+
+class InstructorDashboardResponse(BaseModel):
+    """Response body for GET /api/auth/dashboard/instructor."""
+
+    message: str
+    class_performance_average_stub: str

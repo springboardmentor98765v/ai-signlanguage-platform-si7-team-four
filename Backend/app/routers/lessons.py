@@ -107,7 +107,7 @@ seed_alphabet_lessons()
 
 # --- GET ALL LESSONS ---
 
-@router.get("", status_code=status.HTTP_200_OK)
+@router.get("", status_code=status.HTTP_200_OK, summary="List Lessons (paginated)", description="SRS Requirement: Fetch lessons with built-in search-by-name and pagination.")
 def get_all_lessons(
     skip: int = Query(0, ge=0, description="Number of records to skip for pagination"),
     limit: int = Query(10, ge=1, le=100, description="Number of records per page (default 10)"),
@@ -137,7 +137,7 @@ def get_all_lessons(
 
 # --- STATIC SPECIFIC ROUTES (MUST BE BEFORE /{lesson_id} ROUTE) ---
 
-@router.get("/advanced", status_code=status.HTTP_200_OK)
+@router.get("/advanced", status_code=status.HTTP_200_OK, summary="List Advanced Lessons", description="Milestone 2 & 3 Requirement: Fetches extended multi-tier advanced lessons catalog.")
 def get_advanced_lessons():
     """
     Milestone 2 & 3 Requirement: Fetches extended multi-tier advanced lessons catalog.
@@ -151,7 +151,7 @@ def get_advanced_lessons():
         "advanced_lessons": advanced_lessons
     }
 
-@router.post("/bulk-upload-csv", status_code=status.HTTP_201_CREATED)
+@router.post("/bulk-upload-csv", status_code=status.HTTP_201_CREATED, summary="Bulk Upload Lessons via CSV String", description="Milestone 3 Requirement: Bulk upload lessons via a CSV string payload. CSV header format: module_id,title,content_description,expected_gesture,category,difficulty")
 def bulk_upload_lessons_csv(payload: CSVBulkUploadPayload):
     """
     Milestone 3 Requirement: Bulk upload lessons via CSV string payload.
@@ -202,7 +202,7 @@ def bulk_upload_lessons_csv(payload: CSVBulkUploadPayload):
 
 # --- DYNAMIC PARAMETER ROUTES ---
 
-@router.get("/{lesson_id}", response_model=LessonResponse, status_code=status.HTTP_200_OK)
+@router.get("/{lesson_id}", response_model=LessonResponse, status_code=status.HTTP_200_OK, summary="Get Lesson by ID", description="SRS Requirement: Fetch an individual lesson's details by ID.")
 def get_lesson_by_id(lesson_id: str):
     """
     SRS Requirement: Fetch an individual lesson details by ID.
@@ -212,7 +212,7 @@ def get_lesson_by_id(lesson_id: str):
     
     return LessonResponse(**MOCK_LESSON_DB[lesson_id])
 
-@router.post("", response_model=LessonResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=LessonResponse, status_code=status.HTTP_201_CREATED, summary="Create a Custom Lesson", description="RBAC: Instructor or Admin only. Adds a custom lesson to the catalog.")
 def create_lesson(
     lesson_input: LessonCreate,
     token_payload: dict = Depends(verify_token_and_role(["Instructor", "Admin"]))
@@ -235,7 +235,7 @@ def create_lesson(
     MOCK_LESSON_DB[new_id] = new_lesson
     return LessonResponse(**new_lesson)
 
-@router.put("/{lesson_id}", response_model=LessonResponse, status_code=status.HTTP_200_OK)
+@router.put("/{lesson_id}", response_model=LessonResponse, status_code=status.HTTP_200_OK, summary="Update a Lesson", description="RBAC: Instructor or Admin only. Edits an existing lesson by ID.")
 def update_lesson(
     lesson_id: str,
     lesson_update: LessonCreate,
@@ -260,7 +260,7 @@ def update_lesson(
     MOCK_LESSON_DB[lesson_id] = updated_data
     return LessonResponse(**updated_data)
 
-@router.delete("/{lesson_id}", status_code=status.HTTP_200_OK)
+@router.delete("/{lesson_id}", status_code=status.HTTP_200_OK, summary="Delete a Lesson", description="RBAC: Instructor or Admin only. Deletes a lesson by ID.")
 def delete_lesson(
     lesson_id: str,
     token_payload: dict = Depends(verify_token_and_role(["Instructor", "Admin"]))

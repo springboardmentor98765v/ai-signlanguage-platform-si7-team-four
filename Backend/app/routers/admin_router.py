@@ -9,6 +9,15 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.models import User, Lesson
 from app.utils.validation import ALLOWED_ROLES, ALLOWED_CATEGORIES, ALLOWED_DIFFICULTY, reject_malicious
+from app.schemas.admin import (
+    UserAdminOut,
+    StatusMessageResponse,
+    DeleteUserResponse,
+    BulkDeleteResponse,
+    BulkCountResponse,
+    BulkUserStatusResponse,
+    BulkUploadLessonsResponse,
+)
 
 router = APIRouter(prefix="/api/admin", tags=["Admin Management"])
 
@@ -40,7 +49,16 @@ class RoleUpdateRequest(BaseModel):
             )
         return value
 
-@router.get("/users", status_code=status.HTTP_200_OK)
+@router.get(
+    "/users",
+    response_model=list[UserAdminOut],
+    status_code=status.HTTP_200_OK,
+    summary="List All Users",
+    description=(
+        "Admin-only. Returns every registered user. Requires the caller's email as a "
+        "query parameter so the server can verify Admin privileges (403 if not Admin)."
+    ),
+)
 def list_all_users(admin_email: str, db: Session = Depends(get_db)):
     """Checkpoint 1: Get all users API"""
     verify_admin(admin_email, db)
@@ -56,7 +74,13 @@ def list_all_users(admin_email: str, db: Session = Depends(get_db)):
         } for u in users
     ]
 
-@router.patch("/user-status", status_code=status.HTTP_200_OK)
+@router.patch(
+    "/user-status",
+    response_model=StatusMessageResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Activate or Deactivate a User",
+    description="Admin-only. Sets the active/inactive status for a single user by email.",
+)
 def update_user_status(data: StatusUpdateRequest, admin_email: str, db: Session = Depends(get_db)):
     """Checkpoint 2: Activate/Deactivate user API"""
     verify_admin(admin_email, db)
@@ -68,7 +92,13 @@ def update_user_status(data: StatusUpdateRequest, admin_email: str, db: Session 
     db.commit()
     return {"message": f"User status successfully updated to active={data.is_active}", "email": user.email}
 
-@router.patch("/user-role", status_code=status.HTTP_200_OK)
+@router.patch(
+    "/user-role",
+    response_model=StatusMessageResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Change a User's Role",
+    description="Admin-only. Changes a single user's role to an allowed role.",
+)
 def update_user_role(data: RoleUpdateRequest, admin_email: str, db: Session = Depends(get_db)):
     """Checkpoint 3: Change user role API"""
     verify_admin(admin_email, db)
@@ -80,7 +110,13 @@ def update_user_role(data: RoleUpdateRequest, admin_email: str, db: Session = De
     db.commit()
     return {"message": f"User role successfully changed to {data.new_role}", "email": user.email}
 
-@router.delete("/users/{user_id}", status_code=status.HTTP_200_OK)
+@router.delete(
+    "/users/{user_id}",
+    response_model=DeleteUserResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Delete a User by ID",
+    description="Admin-only. Permanently deletes a single user record by UUID.",
+)
 def delete_single_user(user_id: str, admin_email: Optional[str] = None, db: Session = Depends(get_db)):
     """Milestone 2 & 3: Delete user by ID"""
     if admin_email:
@@ -115,7 +151,13 @@ class BulkRoleRequest(BaseModel):
             )
         return value
 
-@router.post("/users/bulk-delete", status_code=status.HTTP_200_OK)
+@router.post(
+    "/users/bulk-delete",
+    response_model=BulkDeleteResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Bulk Delete Users",
+    description="Admin-only. Deletes multiple users by ID array; reports any IDs not found.",
+)
 def bulk_delete_users(data: BulkDeleteRequest, admin_email: Optional[str] = None, db: Session = Depends(get_db)):
     """
     Milestone 3 Requirement: Bulk delete multiple users by ID array.
@@ -140,7 +182,13 @@ def bulk_delete_users(data: BulkDeleteRequest, admin_email: Optional[str] = None
         "not_found_ids": not_found
     }
 
-@router.patch("/users/bulk-status", status_code=status.HTTP_200_OK)
+@router.patch(
+    "/users/bulk-status",
+    response_model=BulkCountResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Bulk Update User Status",
+    description="Admin-only. Sets active/inactive status across multiple users by ID array.",
+)
 def bulk_update_status(data: BulkStatusRequest, admin_email: Optional[str] = None, db: Session = Depends(get_db)):
     """
     Milestone 3 Requirement: Bulk update active/inactive status across users.
@@ -161,7 +209,13 @@ def bulk_update_status(data: BulkStatusRequest, admin_email: Optional[str] = Non
         "updated_count": updated_count
     }
 
-@router.patch("/users/bulk-role", status_code=status.HTTP_200_OK)
+@router.patch(
+    "/users/bulk-role",
+    response_model=BulkCountResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Bulk Update User Roles",
+    description="Admin-only. Changes roles across multiple users by ID array to an allowed role.",
+)
 def bulk_update_roles(data: BulkRoleRequest, admin_email: Optional[str] = None, db: Session = Depends(get_db)):
     """
     Milestone 3 Requirement: Bulk update user roles across multiple accounts.
@@ -189,7 +243,17 @@ class BulkUserStatusRequest(BaseModel):
     is_active: bool
 
 
-@router.post("/bulk-user-status", status_code=status.HTTP_200_OK)
+@router.post(
+    "/bulk-user-status",
+    response_model=BulkUserStatusResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Bulk User Status (IDs or Emails)",
+    description=(
+        "Admin-only. Activate/deactivate many users in one call. Each identifier in "
+        "`user_ids` is matched by UUID first, then by email. Reports which users were "
+        "updated and which were not found."
+    ),
+)
 def bulk_user_status(data: BulkUserStatusRequest, admin_email: str, db: Session = Depends(get_db)):
     """
     Milestone 3 Day 4: Activate/deactivate many users in one call.
@@ -225,7 +289,18 @@ def bulk_user_status(data: BulkUserStatusRequest, admin_email: str, db: Session 
     }
 
 
-@router.post("/bulk-upload-lessons", status_code=status.HTTP_200_OK)
+@router.post(
+    "/bulk-upload-lessons",
+    response_model=BulkUploadLessonsResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Bulk Upload Lessons (CSV file)",
+    description=(
+        "Admin-only. Upload a CSV file to bulk-insert Lesson records. Multipart form "
+        "with a `file` field. Required CSV header: "
+        "title,description,expected_gesture,category,difficulty,module_id. Returns a "
+        "summary of rows processed, inserted, and rejected (with reasons)."
+    ),
+)
 async def bulk_upload_lessons(
     file: UploadFile = File(...),
     admin_email: str = "",

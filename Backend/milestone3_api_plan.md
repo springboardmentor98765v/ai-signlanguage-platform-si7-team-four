@@ -197,11 +197,65 @@ curl against `http://127.0.0.1:8000`.
   pytest stage into a CI check (`.github/workflows/`).
 
 ### I. Swagger/OpenAPI documentation updates
-- Ensure all new endpoints carry `summary`/`description`/`tags` (existing `notification_router`
-  is the style model).
-- Add example payloads via Pydantic `Field(..., examples=[...])`.
-- Verify `/docs` renders every Milestone 3 endpoint after registration; document versioning and
-  the 429 / validation / 500 error contract in the API description.
+- **Day 9 (complete):** every Milestone 3 router (`auth.py`, `notification_router.py`,
+  `admin_router.py`, `course.py`, `practice.py`, `lessons.py`, `main.py`) now carries an
+  explicit `summary`, docstring `description`, feature-based `tags`, and accurate request/
+  response Pydantic models so Swagger `/docs` renders correct request/response schemas.
+- Response schemas live in `app/schemas/`: `user.py` (auth responses), `admin.py`
+  (admin responses), `practice.py` (practice responses), `notification.py` (existing).
+- Duplicate/broken `POST /api/practice/start` route and the `end_practice` NameError
+  (references to out-of-scope `user_uuid`/`payload`) were fixed in `practice.py`.
+- The `Notifications` tag replaces the old verbose `Notification Service (Milestone 3 - Day 2)`
+  tag so `/docs` is organized by feature: `Authentication`, `Admin Management`,
+  `Notifications`, `Practice Service`, `Course Service`, `Lessons Service`, etc.
+- `/docs` is reachable at `http://127.0.0.1:8000/docs`; the OpenAPI JSON at
+  `http://127.0.0.1:8000/openapi.json` is the authoritative endpoint list (verified Day 9).
+- Cross-team request/response contracts for Intern 1 (Frontend) and Intern 4 (Business
+  Logic) are documented in `Backend/docs/frontend_integration_notes.md`.
+
+### J. Final endpoint list (Milestone 3) - matches /docs (verified Day 9)
+
+All paths below were read from the live `/openapi.json` (no duplicate operations). New or
+changed in Milestone 3 are marked with an asterisk (*).
+
+| Method | Path | Tag | Summary |
+| :--- | :--- | :--- | :--- |
+| POST | `/api/auth/register` * | Authentication | Register New User |
+| POST | `/api/auth/login` * | Authentication | Login (Issue Access + Refresh Tokens) |
+| POST | `/api/auth/refresh-token` * | Authentication | Refresh Access Token |
+| GET | `/api/auth/dashboard/learner` * | Authentication | Learner Dashboard (RBAC: Learner/Admin) |
+| GET | `/api/auth/dashboard/instructor` * | Authentication | Instructor Dashboard (RBAC: Instructor/Admin) |
+| POST | `/api/notifications` * | Notifications | Create Notification |
+| GET | `/api/notifications/{user_id}` * | Notifications | Get My Notifications |
+| PATCH | `/api/notifications/{notification_id}/read` * | Notifications | Mark Notification as Read |
+| GET | `/api/admin/users` * | Admin Management | List All Users |
+| PATCH | `/api/admin/user-status` * | Admin Management | Activate or Deactivate a User |
+| PATCH | `/api/admin/user-role` * | Admin Management | Change a User's Role |
+| DELETE | `/api/admin/users/{user_id}` * | Admin Management | Delete a User by ID |
+| POST | `/api/admin/users/bulk-delete` * | Admin Management | Bulk Delete Users |
+| PATCH | `/api/admin/users/bulk-status` * | Admin Management | Bulk Update User Status |
+| PATCH | `/api/admin/users/bulk-role` * | Admin Management | Bulk Update User Roles |
+| POST | `/api/admin/bulk-user-status` * | Admin Management | Bulk User Status (IDs or Emails) |
+| POST | `/api/admin/bulk-upload-lessons` * | Admin Management | Bulk Upload Lessons (CSV file) |
+| POST | `/api/practice/start` * | Practice Service | Start a Practice Session |
+| POST | `/api/practice/end` * | Practice Service | End a Practice Session |
+| POST | `/api/practice/submit` * | Practice Service | Submit a Practice Frame for AI Feedback |
+| GET | `/api/courses/modules` | Course Service | Get All Course Modules |
+| GET | `/api/courses/modules/{module_id}/lessons` | Course Service | Get Lessons for a Module |
+| POST | `/api/courses/modules` | Course Service | Create a Custom Course Module |
+| GET | `/api/lessons` * | Lessons Service | List Lessons (paginated) |
+| GET | `/api/lessons/advanced` | Lessons Service | List Advanced Lessons |
+| GET | `/api/lessons/{lesson_id}` | Lessons Service | Get Lesson by ID |
+| POST | `/api/lessons` * | Lessons Service | Create a Custom Lesson |
+| PUT | `/api/lessons/{lesson_id}` * | Lessons Service | Update a Lesson |
+| DELETE | `/api/lessons/{lesson_id}` * | Lessons Service | Delete a Lesson |
+| POST | `/api/lessons/bulk-upload-csv` * | Lessons Service | Bulk Upload Lessons via CSV String |
+| GET | `/` | System Health & Status | Root / API Launch Status |
+| GET | `/health` | System Health & Status | Health Check |
+
+Milestone 2 endpoints (unchanged) also remain in `/docs`: forgot/change-password,
+profile, instructor-student, integration test-sync, dictionary, feedback, progress,
+translations, and the Day 3 gesture endpoints.
 
 ---
 

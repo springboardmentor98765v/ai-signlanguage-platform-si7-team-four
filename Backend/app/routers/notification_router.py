@@ -20,7 +20,7 @@ from app.db.database import get_db
 from app.models.models import Notification
 from app.schemas.notification import NotificationCreate, NotificationOut
 
-router = APIRouter(prefix="/api/notifications", tags=["Notification Service (Milestone 3 - Day 2)"])
+router = APIRouter(prefix="/api/notifications", tags=["Notifications"])
 
 
 @router.post(
@@ -86,6 +86,7 @@ def get_user_notifications(
 
 @router.patch(
     "/{notification_id}/read",
+    response_model=NotificationOut,
     status_code=status.HTTP_200_OK,
     summary="Mark Notification as Read",
     description="Milestone 3 Day 2: Mark a specific notification as read in the database.",

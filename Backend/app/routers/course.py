@@ -37,7 +37,13 @@ seed_alphabet_course()
 
 # --- CRUD READ ENDPOINTS ---
 
-@router.get("/modules", response_model=List[ModuleResponse], status_code=status.HTTP_200_OK, tags=["Course Service"])
+@router.get(
+    "/modules",
+    response_model=List[ModuleResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Get All Course Modules",
+    description="Returns every curriculum module, each with its nested lessons.",
+)
 def get_all_modules():
     result = []
     for mod_id, mod_data in MOCK_MODULE_DB.items():
@@ -57,7 +63,13 @@ def get_all_modules():
         result.append(compiled_module)
     return result
 
-@router.get("/modules/{module_id}/lessons", response_model=List[LessonResponse], status_code=status.HTTP_200_OK, tags=["Course Service"])
+@router.get(
+    "/modules/{module_id}/lessons",
+    response_model=List[LessonResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Get Lessons for a Module",
+    description="Returns the lessons belonging to a specific module. 404 if the module does not exist.",
+)
 def get_lessons_by_module(module_id: str):
     if module_id not in MOCK_MODULE_DB:
         raise HTTPException(status_code=404, detail="Requested course module sequence not found.")
@@ -70,7 +82,13 @@ def get_lessons_by_module(module_id: str):
 
 # --- CRUD CREATE ENDPOINTS (PROTECTED BY RBAC) ---
 
-@router.post("/modules", response_model=ModuleResponse, status_code=status.HTTP_201_CREATED, tags=["Course Service"])
+@router.post(
+    "/modules",
+    response_model=ModuleResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a Custom Course Module",
+    description="RBAC: Instructor or Admin only. Adds a new curriculum module to the in-memory catalog.",
+)
 def create_custom_module(
     module_input: ModuleCreate, 
     token_payload: dict = Depends(verify_token_and_role(["Instructor", "Admin"]))

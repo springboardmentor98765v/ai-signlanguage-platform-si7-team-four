@@ -2,7 +2,15 @@ import os
 from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException, status, Depends, Request, Response
 from pydantic import BaseModel
-from app.schemas.user import UserRegister, UserLogin
+from app.schemas.user import (
+    UserRegister,
+    UserLogin,
+    RegisterResponse,
+    LoginResponse,
+    RefreshTokenResponse,
+    LearnerDashboardResponse,
+    InstructorDashboardResponse,
+)
 # Import security utilities and shared secrets directly from security.py to avoid key mismatches
 from app.utils.security import create_access_token, create_refresh_token, verify_token_and_role, JWT_SECRET, JWT_ALGORITHM
 from app.utils.ratelimit import (
@@ -34,7 +42,16 @@ router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 # Temporary simulated database storage dictionary (kept for login path compatibility)
 MOCK_USER_DB = {}
 
-@router.post("/register", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    status_code=status.HTTP_201_CREATED,
+    response_model=RegisterResponse,
+    summary="Register New User",
+    description=(
+        "Create a new user account. Password is bcrypt-hashed before storage. "
+        "Rate limited to 5 requests per minute per email (429 on exceed)."
+    ),
+)
 @limiter.limit(REGISTER_LIMIT, error_message=REGISTER_ERROR_MESSAGE)
 def register_user(
     request: Request,
@@ -42,6 +59,9 @@ def register_user(
     user_data: UserRegister,
     db: Session = Depends(get_db),
 ):
+    """
+    Register a new user. Returns the new user id and role on success.
+    """
     # 1. Check if user already exists in the real database using the imported User model
     existing_user = db.query(User).filter(User.email == user_data.email).first()
     if existing_user or user_data.email in MOCK_USER_DB:
@@ -86,7 +106,16 @@ def register_user(
         "role": user_data.role
     }
 
-@router.post("/login", status_code=status.HTTP_200_OK)
+@router.post(
+    "/login",
+    status_code=status.HTTP_200_OK,
+    response_model=LoginResponse,
+    summary="Login (Issue Access + Refresh Tokens)",
+    description=(
+        "Validate credentials and return short-lived access and long-lived refresh "
+        "tokens. Rate limited to 5 requests per minute per email (429 on exceed)."
+    ),
+)
 @limiter.limit(LOGIN_LIMIT, error_message=LOGIN_ERROR_MESSAGE)
 def login_user(
     request: Request,
@@ -153,7 +182,16 @@ def login_user(
 
 # --- DAY 4 DELIVERABLE: ROLE-BASED ACCESS CONTROL MIDDLEWARE DECKS ---
 
-@router.get("/dashboard/learner", status_code=status.HTTP_200_OK)
+@router.get(
+    "/dashboard/learner",
+    status_code=status.HTTP_200_OK,
+    response_model=LearnerDashboardResponse,
+    summary="Learner Dashboard (RBAC: Learner/Admin)",
+    description=(
+        "Role-protected dashboard. Requires a valid Bearer access token with a role "
+        "of 'Learner' or 'Admin'. Returns stub metrics for the learner."
+    ),
+)
 def get_learner_dashboard(token_data: dict = Depends(verify_token_and_role(["Learner", "Admin"]))):
     """
     Role-Based Route: Only accessible if your authenticated JWT has a role of 'Learner' or 'Admin'.
@@ -164,7 +202,16 @@ def get_learner_dashboard(token_data: dict = Depends(verify_token_and_role(["Lea
         "lessons_completed_stub": 18
     }
 
-@router.get("/dashboard/instructor", status_code=status.HTTP_200_OK)
+@router.get(
+    "/dashboard/instructor",
+    status_code=status.HTTP_200_OK,
+    response_model=InstructorDashboardResponse,
+    summary="Instructor Dashboard (RBAC: Instructor/Admin)",
+    description=(
+        "Role-protected dashboard. Requires a valid Bearer access token with a role "
+        "of 'Instructor' or 'Admin'. Returns a stub class performance metric."
+    ),
+)
 def get_instructor_dashboard(token_data: dict = Depends(verify_token_and_role(["Instructor", "Admin"]))):
     """
     Role-Based Route: Only accessible if your authenticated JWT has a role of 'Instructor' or 'Admin'.
@@ -180,7 +227,16 @@ def get_instructor_dashboard(token_data: dict = Depends(verify_token_and_role(["
 class RefreshRequest(BaseModel):
     refresh_token: str
 
-@router.post("/refresh-token", status_code=status.HTTP_200_OK)
+@router.post(
+    "/refresh-token",
+    status_code=status.HTTP_200_OK,
+    response_model=RefreshTokenResponse,
+    summary="Refresh Access Token",
+    description=(
+        "Exchange a valid, non-expired refresh token for a fresh short-lived access "
+        "token. Returns 401 if the refresh token is missing, expired, or malformed."
+    ),
+)
 def refresh_session(body: RefreshRequest):
     """
     Day 8 Upgraded Deliverable: Validates the real refresh token and issues a fresh short-lived access token.
