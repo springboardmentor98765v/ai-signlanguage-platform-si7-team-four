@@ -166,6 +166,29 @@ curl against `http://127.0.0.1:8000`.
 
 ---
 
+## 3.5 Notification Event Contract (Day 3 - agreed with Intern 4 / Business Logic)
+
+Events raised by backend services must call the shared server-side helper
+`app/services/notification_service.py::create_notification(db, user_id, title, message, event_type)`.
+This inserts a `Notification` row directly (no HTTP round trip) so the notification
+immediately appears in `GET /api/notifications/{user_id}`.
+
+| event_type | Trigger point | Description |
+| :--- | :--- | :--- |
+| `badge_earned` | `assessment_service.assess(...)` on `is_correct=True` | Learner passed a lesson / correctly signed a gesture; badge awarded. |
+| `certificate_ready` | `certificate_service.generate_certificate_pdf(...)` after PDF build | Learner's certificate is generated and ready to download. |
+| `new_recommendation` | `recommendation_service.generate_recommendations(...)` when results are non-empty | Extra practice recommended for specific signs. |
+
+Wiring status (Day 3):
+- [x] `certificate_ready` - hooked into `certificate_service.generate_certificate_pdf` (optional `db`, `user_id`).
+- [x] `badge_earned` - hooked into `assessment_service.assess` (optional `db`, `user_id`).
+- [x] `new_recommendation` - hooked into `recommendation_service.generate_recommendations` (optional `db`, `user_id`).
+- Intern 4's business-logic layer will pass a `db` session + `user_id` into these service
+  functions to raise notifications; hook params are optional so existing callers are unaffected.
+- Tested in `Backend/test_milestone3_day3.py`.
+
+---
+
 ## 4. Checkpoints
 
 - [x] List of new/updated APIs written and shared (`Backend/milestone3_api_plan.md`)

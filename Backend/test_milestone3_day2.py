@@ -1,11 +1,13 @@
 """
 Milestone 3 - Day 2: Notification System Test Suite
 ----------------------------------------------------
-Verifies all four Day 2 checkpoints:
-  [x] Notifications table created (with Intern 5)
-  [x] 'Create notification' API working
-  [x] 'Get my notifications' API working
-  [x] 'Mark as read' API working
+Verifies all four Day 2 checkpoints against the spec-compliant API surface:
+  [x] Notifications table created
+  [x] 'Create notification' API working          -> POST /api/notifications
+  [x] 'Get my notifications' API working         -> GET /api/notifications/{user_id}
+  [x] 'Mark as read' API working                 -> PATCH /api/notifications/{id}/read
+
+Agreed event types: "badge_earned", "certificate_ready", "new_recommendation".
 """
 
 import pytest
@@ -24,7 +26,7 @@ def _create_notification(user_id: str, title: str = "Test Title", message: str =
         "user_id": user_id,
         "title": title,
         "message": message,
-        "notification_type": "info",
+        "event_type": "info",
     })
 
 
@@ -60,24 +62,24 @@ def test_checkpoint2_create_notification_success():
     assert data["user_id"] == user_id
     assert data["title"] == "Welcome!"
     assert data["message"] == "Your account is ready."
-    assert data["notification_type"] == "info"
+    assert data["event_type"] == "info"
     assert data["is_read"] is False
     assert "id" in data
     assert "created_at" in data
 
 
 def test_checkpoint2_create_notification_all_types():
-    """Checkpoint 2: Create notifications for all valid types."""
+    """Checkpoint 2: Create notifications for all agreed event types."""
     user_id = "types_test_user_02"
-    for notif_type in ["info", "success", "warning", "alert"]:
+    for event_type in ["info", "badge_earned", "certificate_ready", "new_recommendation"]:
         res = client.post("/api/notifications", json={
             "user_id": user_id,
-            "title": f"Type {notif_type}",
-            "message": f"This is a {notif_type} notification.",
-            "notification_type": notif_type,
+            "title": f"Event {event_type}",
+            "message": f"This is a {event_type} notification.",
+            "event_type": event_type,
         })
-        assert res.status_code == 201, f"Failed for type '{notif_type}': {res.text}"
-        assert res.json()["notification_type"] == notif_type
+        assert res.status_code == 201, f"Failed for type '{event_type}': {res.text}"
+        assert res.json()["event_type"] == event_type
 
 
 def test_checkpoint2_create_notification_empty_user_id_rejected():
@@ -97,7 +99,8 @@ def test_checkpoint2_create_notification_empty_title_rejected():
         "title": "",
         "message": "Should fail.",
     })
-    assert res.status_code == 400
+    # 422 (Pydantic min_length) or 400 (handler strip check) both reject it.
+    assert res.status_code in (400, 422)
 
 
 # ─────────────────────────────────────────────────────────
@@ -105,7 +108,7 @@ def test_checkpoint2_create_notification_empty_title_rejected():
 # ─────────────────────────────────────────────────────────
 
 def test_checkpoint3_get_my_notifications_returns_correct_user():
-    """Checkpoint 3: /me endpoint returns only the queried user's notifications."""
+    """Checkpoint 3: GET /{user_id} returns only the queried user's notifications."""
     user_id = "get_test_user_03"
     other_user_id = "other_user_03"
 
@@ -114,7 +117,7 @@ def test_checkpoint3_get_my_notifications_returns_correct_user():
     _create_notification(user_id, "My Notification 2", "For get_test_user_03")
     _create_notification(other_user_id, "Other Notification", "For other_user_03")
 
-    res = client.get(f"/api/notifications/me?user_id={user_id}")
+    res = client.get(f"/api/notifications/{user_id}")
     assert res.status_code == 200
     data = res.json()
     assert isinstance(data, list)
@@ -127,48 +130,21 @@ def test_checkpoint3_get_my_notifications_returns_correct_user():
     assert "My Notification 2" in titles
 
 
-def test_checkpoint3_get_my_notifications_unread_filter():
-    """Checkpoint 3: unread_only=true returns only unread notifications."""
-    user_id = "unread_test_user_03"
+def test_checkpoint3_get_my_notifications_newest_first():
+    """Checkpoint 3: Notifications are returned newest first."""
+    user_id = "order_test_user_03"
+    _create_notification(user_id, "Older", "First created")
+    _create_notification(user_id, "Newer", "Second created")
 
-    # Create two notifications
-    r1 = _create_notification(user_id, "Unread Notif", "Should appear")
-    r2 = _create_notification(user_id, "Will be read", "Will be marked read")
-    assert r1.status_code == 201
-    assert r2.status_code == 201
-    notif_id_to_read = r2.json()["id"]
-
-    # Mark one as read
-    mark_res = client.patch(f"/api/notifications/{notif_id_to_read}/read")
-    assert mark_res.status_code == 200
-
-    # Fetch unread only
-    res = client.get(f"/api/notifications/me?user_id={user_id}&unread_only=true")
+    res = client.get(f"/api/notifications/{user_id}")
     assert res.status_code == 200
     data = res.json()
-    for notif in data:
-        assert notif["is_read"] is False
-
-
-def test_checkpoint3_get_my_notifications_pagination():
-    """Checkpoint 3: Pagination (skip, limit) works correctly."""
-    user_id = "pagination_test_user_03"
-    for i in range(5):
-        _create_notification(user_id, f"Paginated Notif {i}", f"Message {i}")
-
-    # Fetch 2 with skip=0
-    res = client.get(f"/api/notifications/me?user_id={user_id}&limit=2&skip=0")
-    assert res.status_code == 200
-    assert len(res.json()) <= 2
-
-    # Fetch 2 with skip=2
-    res2 = client.get(f"/api/notifications/me?user_id={user_id}&limit=2&skip=2")
-    assert res2.status_code == 200
+    assert data[0]["title"] == "Newer"
 
 
 def test_checkpoint3_get_my_notifications_empty_for_unknown_user():
     """Checkpoint 3: Unknown user ID returns an empty list (not an error)."""
-    res = client.get("/api/notifications/me?user_id=nobody_user_xyz_999")
+    res = client.get("/api/notifications/nobody_user_xyz_999")
     assert res.status_code == 200
     assert res.json() == []
 
@@ -189,11 +165,11 @@ def test_checkpoint4_mark_as_read_success():
     patch_res = client.patch(f"/api/notifications/{notif_id}/read")
     assert patch_res.status_code == 200
     patch_data = patch_res.json()
-    assert patch_data["notification_id"] == notif_id
+    assert patch_data["id"] == notif_id
     assert patch_data["is_read"] is True
 
     # Verify in the DB via get-my-notifications
-    get_res = client.get(f"/api/notifications/me?user_id={user_id}")
+    get_res = client.get(f"/api/notifications/{user_id}")
     assert get_res.status_code == 200
     found = next((n for n in get_res.json() if n["id"] == notif_id), None)
     assert found is not None
@@ -218,34 +194,3 @@ def test_checkpoint4_mark_as_read_invalid_id():
     """Checkpoint 4: Marking a non-existent notification returns 404."""
     res = client.patch("/api/notifications/nonexistent-id-99999/read")
     assert res.status_code == 404
-
-
-# ─────────────────────────────────────────────────────────
-# Supporting endpoint tests
-# ─────────────────────────────────────────────────────────
-
-def test_unread_count_endpoint():
-    """Unread count reflects actual DB state correctly."""
-    user_id = "count_test_user_05"
-    _create_notification(user_id, "Count Test 1", "Msg 1")
-    _create_notification(user_id, "Count Test 2", "Msg 2")
-
-    count_res = client.get(f"/api/notifications/unread-count?user_id={user_id}")
-    assert count_res.status_code == 200
-    assert count_res.json()["unread_count"] >= 2
-    assert count_res.json()["user_id"] == user_id
-
-
-def test_delete_notification_endpoint():
-    """Delete removes notification from DB and subsequent fetch returns 404."""
-    user_id = "delete_test_user_06"
-    create_res = _create_notification(user_id, "Delete Me", "This will be deleted.")
-    notif_id = create_res.json()["id"]
-
-    del_res = client.delete(f"/api/notifications/{notif_id}")
-    assert del_res.status_code == 200
-
-    # Verify it no longer exists
-    get_res = client.get(f"/api/notifications/me?user_id={user_id}")
-    ids = [n["id"] for n in get_res.json()]
-    assert notif_id not in ids
