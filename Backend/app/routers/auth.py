@@ -1,10 +1,17 @@
 import os
 from dotenv import load_dotenv
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Request, Response
 from pydantic import BaseModel
 from app.schemas.user import UserRegister, UserLogin
 # Import security utilities and shared secrets directly from security.py to avoid key mismatches
 from app.utils.security import create_access_token, create_refresh_token, verify_token_and_role, JWT_SECRET, JWT_ALGORITHM
+from app.utils.ratelimit import (
+    limiter,
+    LOGIN_LIMIT,
+    REGISTER_LIMIT,
+    LOGIN_ERROR_MESSAGE,
+    REGISTER_ERROR_MESSAGE,
+)
 import bcrypt
 import uuid
 import jwt 
@@ -28,7 +35,13 @@ router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 MOCK_USER_DB = {}
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-def register_user(user_data: UserRegister, db: Session = Depends(get_db)):
+@limiter.limit(REGISTER_LIMIT, error_message=REGISTER_ERROR_MESSAGE)
+def register_user(
+    request: Request,
+    response: Response,
+    user_data: UserRegister,
+    db: Session = Depends(get_db),
+):
     # 1. Check if user already exists in the real database using the imported User model
     existing_user = db.query(User).filter(User.email == user_data.email).first()
     if existing_user or user_data.email in MOCK_USER_DB:
@@ -74,7 +87,13 @@ def register_user(user_data: UserRegister, db: Session = Depends(get_db)):
     }
 
 @router.post("/login", status_code=status.HTTP_200_OK)
-def login_user(login_data: UserLogin, db: Session = Depends(get_db)):
+@limiter.limit(LOGIN_LIMIT, error_message=LOGIN_ERROR_MESSAGE)
+def login_user(
+    request: Request,
+    response: Response,
+    login_data: UserLogin,
+    db: Session = Depends(get_db),
+):
     """
     Day 4 Upgraded Deliverable: Validates credentials and returns cryptographic access & refresh tokens.
     """

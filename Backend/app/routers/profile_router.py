@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr, Field, field_validator
 import uuid
@@ -6,6 +6,11 @@ import uuid
 from app.db.database import get_db
 from app.models import models
 from app.utils.validation import reject_malicious
+from app.utils.ratelimit import (
+    limiter,
+    PASSWORD_RESET_LIMIT,
+    PASSWORD_RESET_ERROR_MESSAGE,
+)
 
 router = APIRouter(prefix="/api", tags=["Day 2 Milestone 2 APIs"])
 
@@ -61,7 +66,13 @@ def change_password(payload: PasswordChange, db: Session = Depends(get_db)):
 
 # 3. Forgot Password Flow (Console Print Method)
 @router.post("/auth/forgot-password")
-def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+@limiter.limit(PASSWORD_RESET_LIMIT, error_message=PASSWORD_RESET_ERROR_MESSAGE)
+def forgot_password(
+    request: Request,
+    response: Response,
+    payload: ForgotPasswordRequest,
+    db: Session = Depends(get_db),
+):
     user = db.query(models.User).filter(models.User.email == payload.email).first()
     if not user:
         raise HTTPException(status_code=404, detail="Email not registered")

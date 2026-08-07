@@ -1,7 +1,12 @@
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
 import os
+import time
 from dotenv import load_dotenv
+
+from app.utils.ratelimit import limiter
 
 load_dotenv()
 
@@ -31,6 +36,38 @@ app = FastAPI(
     description="Final Production-Frozen API documentation for cross-team integration (Frontend, AI, and Business Logic).",
     version="1.0.0"
 )
+
+# Attach the per-user rate limiter (slowapi) to the application instance.
+app.state.limiter = limiter
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
+    """
+    Day 6 Milestone 3: Friendly 429 response when a per-user rate limit is hit.
+    Includes the reason and a Retry-After header so clients know when to retry.
+    """
+    retry_after = 60
+    view_limit = getattr(request.state, "view_rate_limit", None)
+    if view_limit is not None:
+        try:
+            item, identifiers = view_limit
+            window_stats = limiter.limiter.get_window_stats(item, *identifiers)
+            retry_after = max(1, int(window_stats[0] - time.time()))
+        except Exception:
+            pass
+
+    return JSONResponse(
+        status_code=429,
+        content={
+            "message": "Too many requests. Please slow down and try again shortly.",
+            "error": "rate_limit_exceeded",
+            "detail": exc.detail,
+            "retry_after_seconds": retry_after,
+        },
+        headers={"Retry-After": str(retry_after)},
+    )
+
 
 # Milestone 3 Security Middleware - Security Headers Enforcement
 @app.middleware("http")

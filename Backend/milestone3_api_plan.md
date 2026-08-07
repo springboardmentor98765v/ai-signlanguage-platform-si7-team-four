@@ -142,10 +142,25 @@ curl against `http://127.0.0.1:8000`.
 - Centralize validation messages via shared `app/schemas/`.
 
 ### F. Per-user rate limiting (login, password reset)
-- Add in-process rate limiter (`app/utils/ratelimit.py`) keyed by IP + email for
-  `POST /api/auth/login`, `POST /api/auth/forgot-password`, `POST /api/auth/register`.
-- Default policy: e.g. 10 attempts / 15 min; respond `429 Too Many Requests` with
-  `Retry-After` header. (Redis/backed store deferred - acceptable for SQLite/local dev.)
+- Day 6 implemented with the free, open-source `slowapi` library (see `Backend/requirements.txt`).
+- Limiter lives in `app/utils/ratelimit.py` and keys off the **email in the request body**
+  (per-user), falling back to client IP only when no email is present. This keeps shared-IP
+  users (same office Wi-Fi) from being wrongly blocked while still throttling rapid abuse of
+  a single account.
+- Limited endpoints and policy (5 attempts / minute per account):
+  - `POST /api/auth/login`
+  - `POST /api/auth/register`
+  - `POST /api/auth/forgot-password` (password-reset entry point that exists)
+- Password reset note: only the **first step** (`/api/auth/forgot-password`, which prints a reset
+  link to the console) exists today. The **second step** (`/api/auth/reset-password`, which consumes
+  the token to change the password) is **not implemented yet** in this repo, so per the SRS we rate
+  limit `/api/auth/login` and `/api/auth/register` (and the existing forgot-password endpoint)
+  instead. When the reset-password endpoint is added, it must be decorated with the same
+  `@limiter.limit(...)` pattern.
+- Hitting the limit returns `429 Too Many Requests` with a friendly JSON message
+  (`message`, `error: rate_limit_exceeded`, `detail`, `retry_after_seconds`) and a `Retry-After` header.
+- Storage: in-memory (`memory://`) backend, acceptable for SQLite/local dev; swap to Redis via
+  `RATELIMIT_STORAGE_URL` for production.
 
 ### G. Automated unit tests (pytest) - 10+ key endpoints
 - Target ≥10 endpoint tests covering: health/root, register, login, refresh-token,
