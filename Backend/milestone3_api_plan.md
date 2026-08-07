@@ -174,11 +174,27 @@ curl against `http://127.0.0.1:8000`.
   `.venv/bin/pytest Backend/ -v` (goal: all passing).
 
 ### H. Automated integration tests via Docker Compose
-- Add `Backend/tests_integration/` with an end-to-end test script that boots the stack via the
-  repo root `docker-compose.yml` and exercises a full user journey
-  (register -> login -> lessons -> practice -> notification -> admin bulk -> CSV upload).
-- Wire into a CI check (`.github/workflows/`) so `docker compose up -d` + pytest integration
-  runs on every push.
+- The repo root `docker-compose.yml` defines the full local backend stack
+  (`postgres` + `backend` + `ai-service`); `docker compose up` brings up the backend at
+  `http://127.0.0.1:8000` (all ports bound to localhost only, per the SRS - no live/public
+  deployment). The backend image (`Dockerfile.backend`) wires `Database_Devops/app/db` over
+  `Backend/app/db`, so inside the container the app reads `DATABASE_URL` (pointing at the
+  `postgres` service) - the `.env` `localhost` value is intentionally NOT used by compose.
+- Full-journey integration tests live in `Backend/test_integration_journeys.py` (Day 8):
+  - Journey A: register -> login -> view lessons -> start practice session.
+  - Journey B: register -> login -> receive/list notification -> mark read.
+  - Journey C: register -> login -> learner dashboard -> refresh token.
+  - RBAC guard: Learner token denied the instructor dashboard (403).
+- Test run mode used on Day 8: **TestClient-based simulation** (the default when
+  `INTEGRATION_BASE_URL` is unset), because **Docker is not installed in this dev
+  environment** (`docker` command unavailable). The same FastAPI app under test is
+  exercised through the same request/response surface as the Docker stack.
+- To run against the real Docker Compose stack instead, set
+  `INTEGRATION_BASE_URL=http://127.0.0.1:8000` after `docker compose up -d`.
+- The full suite (`python3 -m pytest -q` in `Backend/`) passes: 84 tests, including the
+  4 new integration journeys run twice back-to-back with no flakiness.
+- Remaining (tracked, not required on Day 8): wire a `docker compose up -d` + integration
+  pytest stage into a CI check (`.github/workflows/`).
 
 ### I. Swagger/OpenAPI documentation updates
 - Ensure all new endpoints carry `summary`/`description`/`tags` (existing `notification_router`
