@@ -25,7 +25,7 @@ def needs_extra_practice(scores: List[float]) -> bool:
     return average_score < SCORE_THRESHOLD
 
 
-def generate_recommendations(attempts: List[dict]) -> List[dict]:
+def generate_recommendations(attempts: List[dict], db=None, user_id: str | None = None) -> List[dict]:
     grouped_scores = group_scores_by_sign(attempts)
     recommendations: List[dict] = []
 
@@ -35,5 +35,18 @@ def generate_recommendations(attempts: List[dict]) -> List[dict]:
                 "sign": sign,
                 "message": f"Extra practice recommended for '{sign}'."
             })
+
+    # Milestone 3 - Day 3 hook: new recommendations available -> notify the learner.
+    if recommendations and db is not None and user_id:
+        from app.services.notification_service import create_notification
+
+        signs = ", ".join(r["sign"] for r in recommendations)
+        create_notification(
+            db,
+            user_id=user_id,
+            title="New Recommendations",
+            message=f"Extra practice recommended for: {signs}.",
+            event_type="new_recommendation",
+        )
 
     return recommendations

@@ -1,8 +1,23 @@
-from fastapi import APIRouter, HTTPException, status, Depends
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
+from pydantic import BaseModel, Field, field_validator
+from typing import List, Optional
+import csv
+import io
+import uuid
+
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.models.models import User
+from app.models.models import User, Lesson
+from app.utils.validation import ALLOWED_ROLES, ALLOWED_CATEGORIES, ALLOWED_DIFFICULTY, reject_malicious
+from app.schemas.admin import (
+    UserAdminOut,
+    StatusMessageResponse,
+    DeleteUserResponse,
+    BulkDeleteResponse,
+    BulkCountResponse,
+    BulkUserStatusResponse,
+    BulkUploadLessonsResponse,
+)
 
 router = APIRouter(prefix="/api/admin", tags=["Admin Management"])
 
@@ -21,10 +36,29 @@ class StatusUpdateRequest(BaseModel):
     is_active: bool
 
 class RoleUpdateRequest(BaseModel):
-    target_email: str
-    new_role: str
+    target_email: str = Field(..., min_length=1, max_length=180)
+    new_role: str = Field(..., max_length=20)
 
-@router.get("/users", status_code=status.HTTP_200_OK)
+    @field_validator("new_role")
+    @classmethod
+    def _validate_role(cls, value: str) -> str:
+        reject_malicious(value)
+        if value not in ALLOWED_ROLES:
+            raise ValueError(
+                f"new_role must be one of: {sorted(ALLOWED_ROLES)} (got '{value}')."
+            )
+        return value
+
+@router.get(
+    "/users",
+    response_model=list[UserAdminOut],
+    status_code=status.HTTP_200_OK,
+    summary="List All Users",
+    description=(
+        "Admin-only. Returns every registered user. Requires the caller's email as a "
+        "query parameter so the server can verify Admin privileges (403 if not Admin)."
+    ),
+)
 def list_all_users(admin_email: str, db: Session = Depends(get_db)):
     """Checkpoint 1: Get all users API"""
     verify_admin(admin_email, db)
@@ -40,7 +74,13 @@ def list_all_users(admin_email: str, db: Session = Depends(get_db)):
         } for u in users
     ]
 
-@router.patch("/user-status", status_code=status.HTTP_200_OK)
+@router.patch(
+    "/user-status",
+    response_model=StatusMessageResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Activate or Deactivate a User",
+    description="Admin-only. Sets the active/inactive status for a single user by email.",
+)
 def update_user_status(data: StatusUpdateRequest, admin_email: str, db: Session = Depends(get_db)):
     """Checkpoint 2: Activate/Deactivate user API"""
     verify_admin(admin_email, db)
@@ -52,7 +92,13 @@ def update_user_status(data: StatusUpdateRequest, admin_email: str, db: Session 
     db.commit()
     return {"message": f"User status successfully updated to active={data.is_active}", "email": user.email}
 
-@router.patch("/user-role", status_code=status.HTTP_200_OK)
+@router.patch(
+    "/user-role",
+    response_model=StatusMessageResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Change a User's Role",
+    description="Admin-only. Changes a single user's role to an allowed role.",
+)
 def update_user_role(data: RoleUpdateRequest, admin_email: str, db: Session = Depends(get_db)):
     """Checkpoint 3: Change user role API"""
     verify_admin(admin_email, db)
@@ -63,3 +109,301 @@ def update_user_role(data: RoleUpdateRequest, admin_email: str, db: Session = De
     user.role = data.new_role
     db.commit()
     return {"message": f"User role successfully changed to {data.new_role}", "email": user.email}
+
+@router.delete(
+    "/users/{user_id}",
+    response_model=DeleteUserResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Delete a User by ID",
+    description="Admin-only. Permanently deletes a single user record by UUID.",
+)
+def delete_single_user(user_id: str, admin_email: Optional[str] = None, db: Session = Depends(get_db)):
+    """Milestone 2 & 3: Delete user by ID"""
+    if admin_email:
+        verify_admin(admin_email, db)
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+    db.delete(user)
+    db.commit()
+    return {"message": f"User {user_id} deleted successfully."}
+
+# --- Milestone 3 Bulk Admin Actions ---
+
+class BulkDeleteRequest(BaseModel):
+    user_ids: List[str]
+
+class BulkStatusRequest(BaseModel):
+    user_ids: List[str]
+    is_active: bool
+
+class BulkRoleRequest(BaseModel):
+    user_ids: List[str]
+    new_role: str = Field(..., max_length=20)
+
+    @field_validator("new_role")
+    @classmethod
+    def _validate_role(cls, value: str) -> str:
+        reject_malicious(value)
+        if value not in ALLOWED_ROLES:
+            raise ValueError(
+                f"new_role must be one of: {sorted(ALLOWED_ROLES)} (got '{value}')."
+            )
+        return value
+
+@router.post(
+    "/users/bulk-delete",
+    response_model=BulkDeleteResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Bulk Delete Users",
+    description="Admin-only. Deletes multiple users by ID array; reports any IDs not found.",
+)
+def bulk_delete_users(data: BulkDeleteRequest, admin_email: Optional[str] = None, db: Session = Depends(get_db)):
+    """
+    Milestone 3 Requirement: Bulk delete multiple users by ID array.
+    """
+    if admin_email:
+        verify_admin(admin_email, db)
+    
+    deleted_count = 0
+    not_found = []
+    for uid in data.user_ids:
+        user = db.query(User).filter(User.id == uid).first()
+        if user:
+            db.delete(user)
+            deleted_count += 1
+        else:
+            not_found.append(uid)
+            
+    db.commit()
+    return {
+        "message": f"Bulk delete completed. Deleted {deleted_count} users.",
+        "deleted_count": deleted_count,
+        "not_found_ids": not_found
+    }
+
+@router.patch(
+    "/users/bulk-status",
+    response_model=BulkCountResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Bulk Update User Status",
+    description="Admin-only. Sets active/inactive status across multiple users by ID array.",
+)
+def bulk_update_status(data: BulkStatusRequest, admin_email: Optional[str] = None, db: Session = Depends(get_db)):
+    """
+    Milestone 3 Requirement: Bulk update active/inactive status across users.
+    """
+    if admin_email:
+        verify_admin(admin_email, db)
+        
+    updated_count = 0
+    for uid in data.user_ids:
+        user = db.query(User).filter(User.id == uid).first()
+        if user:
+            user.is_active = data.is_active
+            updated_count += 1
+            
+    db.commit()
+    return {
+        "message": f"Bulk status update completed for {updated_count} users to active={data.is_active}.",
+        "updated_count": updated_count
+    }
+
+@router.patch(
+    "/users/bulk-role",
+    response_model=BulkCountResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Bulk Update User Roles",
+    description="Admin-only. Changes roles across multiple users by ID array to an allowed role.",
+)
+def bulk_update_roles(data: BulkRoleRequest, admin_email: Optional[str] = None, db: Session = Depends(get_db)):
+    """
+    Milestone 3 Requirement: Bulk update user roles across multiple accounts.
+    """
+    if admin_email:
+        verify_admin(admin_email, db)
+        
+    updated_count = 0
+    for uid in data.user_ids:
+        user = db.query(User).filter(User.id == uid).first()
+        if user:
+            user.role = data.new_role
+            updated_count += 1
+            
+    db.commit()
+    return {
+        "message": f"Bulk role update completed for {updated_count} users to role={data.new_role}.",
+        "updated_count": updated_count
+    }
+
+# --- Milestone 3 - Day 4: Bulk admin actions ---
+
+class BulkUserStatusRequest(BaseModel):
+    user_ids: List[str]
+    is_active: bool
+
+
+@router.post(
+    "/bulk-user-status",
+    response_model=BulkUserStatusResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Bulk User Status (IDs or Emails)",
+    description=(
+        "Admin-only. Activate/deactivate many users in one call. Each identifier in "
+        "`user_ids` is matched by UUID first, then by email. Reports which users were "
+        "updated and which were not found."
+    ),
+)
+def bulk_user_status(data: BulkUserStatusRequest, admin_email: str, db: Session = Depends(get_db)):
+    """
+    Milestone 3 Day 4: Activate/deactivate many users in one call.
+
+    Accepts a list of user IDs (or emails) plus an is_active bool. Updates all
+    matching users and reports how many were updated and which were not found.
+    """
+    verify_admin(admin_email, db)
+
+    updated = []
+    not_found = []
+    for identifier in data.user_ids:
+        # Match by UUID/ID first, then fall back to email.
+        user = db.query(User).filter(User.id == identifier).first()
+        if user is None:
+            user = db.query(User).filter(User.email == identifier).first()
+
+        if user is None:
+            not_found.append(identifier)
+        else:
+            user.is_active = data.is_active
+            updated.append(user.id)
+
+    db.commit()
+
+    return {
+        "message": f"Bulk status update completed. Updated {len(updated)} user(s) to active={data.is_active}.",
+        "is_active": data.is_active,
+        "updated_count": len(updated),
+        "updated_user_ids": updated,
+        "not_found": not_found,
+        "not_found_count": len(not_found),
+    }
+
+
+@router.post(
+    "/bulk-upload-lessons",
+    response_model=BulkUploadLessonsResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Bulk Upload Lessons (CSV file)",
+    description=(
+        "Admin-only. Upload a CSV file to bulk-insert Lesson records. Multipart form "
+        "with a `file` field. Required CSV header: "
+        "title,description,expected_gesture,category,difficulty,module_id. Returns a "
+        "summary of rows processed, inserted, and rejected (with reasons)."
+    ),
+)
+async def bulk_upload_lessons(
+    file: UploadFile = File(...),
+    admin_email: str = "",
+    db: Session = Depends(get_db),
+):
+    """
+    Milestone 3 Day 4: Bulk upload lessons from an uploaded CSV file.
+
+    Uses Python's built-in csv module (no paid tools, per SRS golden rule).
+    Expected CSV header:
+        title,description,expected_gesture,category,difficulty,module_id
+
+    Each row is validated; valid rows are inserted as Lesson records. Returns a
+    summary of rows processed / inserted / rejected (with reasons).
+    """
+    verify_admin(admin_email, db)
+
+    raw = await file.read()
+    text = raw.decode("utf-8-sig")
+
+    reader = csv.DictReader(io.StringIO(text))
+    expected_headers = {"title", "description", "expected_gesture", "category", "difficulty", "module_id"}
+    provided_headers = {h.strip() for h in (reader.fieldnames or [])}
+
+    if not expected_headers.issubset(provided_headers):
+        missing = sorted(expected_headers - provided_headers)
+        raise HTTPException(
+            status_code=400,
+            detail=f"CSV is missing required column(s): {missing}. Expected: {sorted(expected_headers)}",
+        )
+
+    processed = 0
+    inserted = 0
+    rejected = []
+
+    for row_num, row in enumerate(reader, start=1):
+        processed += 1
+        # Header rows are DictReader fieldnames; data rows come here.
+        title = (row.get("title") or "").strip()
+        description = (row.get("description") or "").strip() or None
+        expected_gesture = (row.get("expected_gesture") or "").strip()
+        category = (row.get("category") or "").strip()
+        difficulty = (row.get("difficulty") or "").strip()
+        module_id = (row.get("module_id") or "").strip()
+
+        reasons = []
+        if not title:
+            reasons.append("missing title")
+        else:
+            try:
+                reject_malicious(title)
+            except ValueError as exc:
+                reasons.append(str(exc))
+        if not expected_gesture:
+            reasons.append("missing expected_gesture")
+        elif len(expected_gesture) > 5:
+            reasons.append(f"expected_gesture too long ({len(expected_gesture)} > 5)")
+        if description:
+            try:
+                reject_malicious(description)
+            except ValueError as exc:
+                reasons.append(str(exc))
+        if not category:
+            reasons.append("missing category")
+        elif category.lower() not in ALLOWED_CATEGORIES:
+            reasons.append(
+                f"category '{category}' not in allowed set: {sorted(ALLOWED_CATEGORIES)}"
+            )
+        if not difficulty:
+            reasons.append("missing difficulty")
+        elif difficulty.lower() not in ALLOWED_DIFFICULTY:
+            reasons.append(
+                f"difficulty '{difficulty}' not in allowed set: {sorted(ALLOWED_DIFFICULTY)}"
+            )
+        if not module_id:
+            reasons.append("missing module_id")
+        else:
+            try:
+                uuid.UUID(module_id)
+            except ValueError:
+                reasons.append(f"module_id '{module_id}' is not a valid UUID")
+
+        if reasons:
+            rejected.append({"row": row_num, "reason": "; ".join(reasons)})
+            continue
+
+        new_lesson = Lesson(
+            module_id=module_id,
+            title=title,
+            description=description,
+            expected_gesture=expected_gesture,
+            category=category,
+            difficulty=difficulty,
+        )
+        db.add(new_lesson)
+        inserted += 1
+
+    db.commit()
+
+    return {
+        "message": f"CSV bulk upload complete: {inserted} lesson(s) inserted.",
+        "rows_processed": processed,
+        "rows_inserted": inserted,
+        "rows_rejected": len(rejected),
+        "rejected_rows": rejected,
+    }

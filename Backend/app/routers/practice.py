@@ -1,42 +1,47 @@
-
-from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy.orm import Session
-
-from app.db.database import get_db
-from app.services import practice_service
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from app.db.database import get_db
-from app.models import models
-from pydantic import BaseModel
 from typing import List
+
+from pydantic import BaseModel, Field
+from app.db.database import get_db
+from app.services import practice_service
+from app.models import models
+from app.schemas.practice import (
+    PracticeSessionResponse,
+    PracticeEndResponse,
+    PracticeSubmitResponse,
+)
 import uuid
 
-import requests
-import base64
-from io import BytesIO
+router = APIRouter(prefix="/api/practice", tags=["Practice Service"])
 
-router = APIRouter(tags=["Practice Service"])
-
-
-# Schema for creating a practice session
-class PracticeStartRequest(BaseModel):
-    user_id: str
-    lesson_id: str
 
 # Schema representing mock real-time image frame landmarks
 class LandmarkPoint(BaseModel):
-    x: float
-    y: float
-    z: float
+    x: float = Field(..., ge=-10.0, le=10.0)
+    y: float = Field(..., ge=-10.0, le=10.0)
+    z: float = Field(..., ge=-10.0, le=10.0)
 
 
-@router.post("/start")
+class FrameSubmissionRequest(BaseModel):
+    session_id: str = Field(..., min_length=1, max_length=80)
+    landmarks: List[LandmarkPoint] = Field(..., min_length=1, max_length=500)
+
+
+@router.post(
+    "/start",
+    response_model=PracticeSessionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Start a Practice Session",
+    description=(
+        "Starts a new practice session for a user/lesson pair via the practice "
+        "service and returns the created session record with status 'in_progress'."
+    ),
+)
 def start_practice(
     user_id: str,
     lesson_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Starts a new practice session via the practice service.
@@ -44,22 +49,20 @@ def start_practice(
     session = practice_service.start_session(db, user_id, lesson_id)
     return session
 
-class FrameSubmissionRequest(BaseModel):
-    session_id: str
-    landmarks: List[LandmarkPoint]
 
-@router.post("/start", status_code=status.HTTP_201_CREATED)
-def start_practice_session(payload: PracticeStartRequest, db: Session = Depends(get_db)):
-    # 1. Validate user_id as a string (keep your UUID validation)
-    try:
-        user_uuid = uuid.UUID(payload.user_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid user_id format.")
-
-@router.post("/end")
+@router.post(
+    "/end",
+    response_model=PracticeEndResponse,
+    status_code=status.HTTP_200_OK,
+    summary="End a Practice Session",
+    description=(
+        "Ends an existing practice session, recording end time and duration. "
+        "Returns 404 if the session does not exist."
+    ),
+)
 def end_practice(
     session_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Ends an existing practice session via the practice service.
@@ -69,32 +72,20 @@ def end_practice(
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    # 2. Query user and lesson
-    user = db.query(models.User).filter(models.User.id == str(user_uuid)).first()
-    
-    # We query the lesson directly by the slug string
-    lesson = db.query(models.Lesson).filter(models.Lesson.slug == payload.lesson_id).first()
-    
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    # If lesson is None, it means that exact string slug doesn't exist in the DB
-    if not lesson:
-        raise HTTPException(status_code=404, detail=f"Lesson '{payload.lesson_id}' not found in database.")
-        
-    # 3. Create Session
-    new_session = models.PracticeSession(
-        user_id=str(user_uuid),
-        lesson_id=lesson.id, # We use the lesson's internal ID
-        status="active"
-    )
-    db.add(new_session)
-    db.commit()
-    db.refresh(new_session)
-    
-    return {"status": "success", "session_id": str(new_session.id)}
+    return session
 
-@router.post("/submit", status_code=status.HTTP_200_OK)
+
+@router.post(
+    "/submit",
+    response_model=PracticeSubmitResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Submit a Practice Frame for AI Feedback",
+    description=(
+        "Submits a set of hand-landmark coordinates for a practice session and "
+        "returns mock AI gesture-recognition metrics and feedback. Requires a valid "
+        "UUID session_id; 400 if malformed, 404 if the session does not exist."
+    ),
+)
 def submit_practice_frame(payload: FrameSubmissionRequest, db: Session = Depends(get_db)):
     # Convert session_id to UUID object for validation
     try:
@@ -102,18 +93,17 @@ def submit_practice_frame(payload: FrameSubmissionRequest, db: Session = Depends
     except ValueError:
         raise HTTPException(status_code=400, detail="session_id must be a valid UUID format.")
 
-    # Cast to str() here as well to prevent the same AttributeError
     session = db.query(models.PracticeSession).filter(models.PracticeSession.id == str(session_uuid)).first()
     if not session:
         raise HTTPException(status_code=404, detail="Active practice session context missing")
-        
+
     # Mock analysis
     mock_confidence = 96.4
     mock_score = 90.0
-    
+
     session.status = "completed"
     db.commit()
-    
+
     return {
         "status": "success",
         "session_id": str(session.id),

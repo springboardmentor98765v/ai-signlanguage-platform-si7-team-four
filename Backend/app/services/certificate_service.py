@@ -48,6 +48,8 @@ def check_certificate_eligibility(progress: LearnerProgress) -> dict:
 def generate_certificate_pdf(
     learner_name: str,
     progress: LearnerProgress,
+    db=None,
+    user_id: str | None = None,
 ) -> bytes:
 
     result = check_certificate_eligibility(progress)
@@ -102,5 +104,20 @@ def generate_certificate_pdf(
 
     pdf = buffer.getvalue()
     buffer.close()
+
+    # Milestone 3 - Day 3 hook: certificate generated -> notify the learner.
+    if db is not None and user_id:
+        from app.services.notification_service import create_notification
+
+        create_notification(
+            db,
+            user_id=user_id,
+            title="Certificate Ready",
+            message=(
+                f"Congratulations {learner_name}! Your certificate is ready "
+                "to download."
+            ),
+            event_type="certificate_ready",
+        )
 
     return pdf

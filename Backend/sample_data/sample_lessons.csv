@@ -1,0 +1,7 @@
+title,description,expected_gesture,category,difficulty,module_id
+The Letter A,Master signing the alphabet letter 'A'.,A,alphabet,easy,11111111-2222-3333-4444-555555555555
+The Letter B,Master signing the alphabet letter 'B'.,B,alphabet,easy,11111111-2222-3333-4444-555555555555
+The Letter C,Master signing the alphabet letter 'C'.,C,alphabet,easy,11111111-2222-3333-4444-555555555555
+Word Hello,Learn how to sign the word Hello.,HELLO,words,medium,11111111-2222-3333-4444-555555555555
+Word Yes,Learn how to sign the word Yes.,YES,words,medium,11111111-2222-3333-4444-555555555555
+Finger Spelling Z,Advanced finger-spelling practice for the letter Z.,Z,alphabet,hard,11111111-2222-3333-4444-555555555555

@@ -12,7 +12,6 @@ import InstructorDashboard from './pages/InstructorDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import ReportsCertificate from './pages/ReportsCertificate';
 
-// Protected Route Guard
 const ProtectedRoute = ({ children, allowedRoles, userRole, isAuthenticated }) => {
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -25,6 +24,7 @@ const ProtectedRoute = ({ children, allowedRoles, userRole, isAuthenticated }) =
 
 export default function App() {
   const [user, setUser] = useState(null);
+  const [theme, setTheme] = useState(() => localStorage.getItem('app_theme') || 'light');
   const [notifications, setNotifications] = useState([
     { id: 1, message: '🏆 You earned the "7-Day Streak" badge!', read: false, time: '10m ago' },
     { id: 2, message: '🎉 Certificate generated for Alphabet Mastery!', read: false, time: '1h ago' },
@@ -32,6 +32,13 @@ export default function App() {
   ]);
   const [showNotifications, setShowNotifications] = useState(false);
   const dropdownRef = useRef(null);
+
+  // Apply dark theme attribute across html & body elements
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    document.body.setAttribute('data-theme', theme);
+    localStorage.setItem('app_theme', theme);
+  }, [theme]);
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
@@ -44,7 +51,6 @@ export default function App() {
     }
   }, []);
 
-  // Close notification dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -60,6 +66,10 @@ export default function App() {
     localStorage.removeItem('user');
     setUser(null);
     window.location.href = '/login';
+  };
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
   };
 
   const markAllAsRead = () => {
@@ -80,6 +90,15 @@ export default function App() {
           </Link>
           
           <div className="nav-links">
+            {/* Theme Toggle Button */}
+            <button
+              onClick={toggleTheme}
+              className="theme-toggle-btn"
+              title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`}
+            >
+              {theme === 'light' ? '🌙 Dark Mode' : '☀️ Light Mode'}
+            </button>
+
             {isAuthenticated ? (
               <>
                 <Link to="/dashboard" className="nav-item">Dashboard</Link>
@@ -97,7 +116,7 @@ export default function App() {
                   <Link to="/admin" className="nav-item">Admin</Link>
                 )}
 
-                {/* In-App Notification Bell */}
+                {/* Notification Bell */}
                 <div style={{ position: 'relative' }} ref={dropdownRef}>
                   <button
                     onClick={() => setShowNotifications(!showNotifications)}

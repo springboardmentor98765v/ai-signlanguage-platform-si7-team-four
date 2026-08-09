@@ -1,20 +1,38 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field, field_validator
 import uuid
 
 from app.db.database import get_db
 from app.models import models
+from app.utils.validation import reject_malicious
+from app.utils.ratelimit import (
+    limiter,
+    PASSWORD_RESET_LIMIT,
+    PASSWORD_RESET_ERROR_MESSAGE,
+)
 
 router = APIRouter(prefix="/api", tags=["Day 2 Milestone 2 APIs"])
 
 class ProfileUpdate(BaseModel):
-    username: str | None = None
+    username: str | None = Field(default=None, min_length=3, max_length=80)
     email: EmailStr | None = None
 
+    @field_validator("username")
+    @classmethod
+    def _reject_malicious_username(cls, value):
+        if value is None:
+            return value
+        return reject_malicious(value)
+
 class PasswordChange(BaseModel):
-    current_password: str
-    new_password: str
+    current_password: str = Field(..., min_length=8, max_length=128)
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+    @field_validator("current_password", "new_password")
+    @classmethod
+    def _reject_malicious_password(cls, value: str) -> str:
+        return reject_malicious(value)
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
@@ -48,7 +66,13 @@ def change_password(payload: PasswordChange, db: Session = Depends(get_db)):
 
 # 3. Forgot Password Flow (Console Print Method)
 @router.post("/auth/forgot-password")
-def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+@limiter.limit(PASSWORD_RESET_LIMIT, error_message=PASSWORD_RESET_ERROR_MESSAGE)
+def forgot_password(
+    request: Request,
+    response: Response,
+    payload: ForgotPasswordRequest,
+    db: Session = Depends(get_db),
+):
     user = db.query(models.User).filter(models.User.email == payload.email).first()
     if not user:
         raise HTTPException(status_code=404, detail="Email not registered")

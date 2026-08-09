@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
 
@@ -12,9 +12,9 @@ router = APIRouter(prefix="/api/v1/progress", tags=["Progress & Analytics"])
 class ProgressCreate(BaseModel):
     user_id: int
     course_id: int
-    completed_lessons: int
-    total_lessons: int
-    accuracy_score: float
+    completed_lessons: int = Field(..., ge=0)
+    total_lessons: int = Field(..., ge=1)
+    accuracy_score: float = Field(..., ge=0.0, le=100.0)
 
 class ProgressResponse(BaseModel):
     id: int

@@ -105,30 +105,3 @@ def get_session(db: Session, session_id: str) -> dict | None:
         "duration_seconds": session.duration_seconds,
     }
 
-from sqlalchemy.orm import Session
-from app.models.models import PracticeSession, Lesson  # Adjust import paths if needed
-
-class PracticeService:
-    @staticmethod
-    def get_user_sessions(db: Session, user_id: int):
-        """Retrieves all practice sessions for a specific user from the DB."""
-        return db.query(PracticeSession).filter(PracticeSession.user_id == user_id).all()
-
-    @staticmethod
-    def create_session(db: Session, user_id: int, lesson_id: int, score: float):
-        """Saves a new practice session run directly to the PostgreSQL database."""
-        # Optional: Validate that the lesson exists
-        lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
-        if not lesson:
-            raise ValueError(f"Lesson with ID {lesson_id} does not exist.")
-
-        new_session = PracticeSession(
-            user_id=user_id,
-            lesson_id=lesson_id,
-            score=score
-        )
-        db.add(new_session)
-        db.commit()
-        db.refresh(new_session)
-        return new_session
-

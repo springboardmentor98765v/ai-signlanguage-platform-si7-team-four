@@ -1,3 +1,6 @@
+import csv
+import os
+
 from typing import Any, Dict, List
 
 
@@ -32,6 +35,36 @@ def _fetch_learner_raw_data(learner_id: str) -> Dict[str, Any]:
         ],
     }
 
+def _fetch_class_summary_data() -> List[Dict[str, Any]]:
+    """
+    Fetch placeholder class summary data for instructor export.
+
+    Returns:
+        A list of learner summary records.
+    """
+    return [
+        {
+            "learner_id": "L001",
+            "learner_name": "Sample Learner 1",
+            "lessons_completed": 8,
+            "average_score": 91.50,
+            "current_streak": 6,
+        },
+        {
+            "learner_id": "L002",
+            "learner_name": "Sample Learner 2",
+            "lessons_completed": 7,
+            "average_score": 84.25,
+            "current_streak": 4,
+        },
+        {
+            "learner_id": "L003",
+            "learner_name": "Sample Learner 3",
+            "lessons_completed": 5,
+            "average_score": 73.00,
+            "current_streak": 2,
+        },
+    ]
 
 def _count_lessons_completed(raw_data: Dict[str, Any]) -> int:
     """
@@ -143,3 +176,83 @@ def generate_progress_report(learner_id: str) -> Dict[str, Any]:
     }
 
     return report
+
+def export_progress_report_csv(learner_id: str) -> str:
+    """
+    Exports the learner's progress report as a CSV file.
+
+    Args:
+        learner_id: Unique identifier of the learner.
+
+    Returns:
+        Path to the generated CSV file.
+    """
+
+    report = generate_progress_report(learner_id)
+
+    os.makedirs("reports", exist_ok=True)
+
+    file_path = os.path.join(
+        "reports",
+        f"progress_report_{learner_id}.csv"
+    )
+
+    with open(file_path, mode="w", newline="", encoding="utf-8") as csv_file:
+        writer = csv.writer(csv_file)
+
+        writer.writerow(["Field", "Value"])
+        writer.writerow(["Learner ID", report["learner_id"]])
+        writer.writerow(["Lessons Completed", report["lessons_completed"]])
+        writer.writerow(["Average Score", report["average_score"]])
+        writer.writerow(
+            ["Weak Letters", ", ".join(report["weak_letters"])]
+        )
+        writer.writerow(
+            ["Certificates Earned",
+             ", ".join(report["certificates_earned"])]
+        )
+
+    return file_path
+
+def export_class_summary_csv() -> str:
+    """
+    Exports the instructor class summary as a CSV file.
+
+    Returns:
+        Path to the generated CSV file.
+    """
+
+    class_summary = _fetch_class_summary_data()
+
+    os.makedirs("reports", exist_ok=True)
+
+    file_path = os.path.join(
+        "reports",
+        "class_summary_report.csv"
+    )
+
+    with open(file_path, mode="w", newline="", encoding="utf-8") as csv_file:
+        writer = csv.writer(csv_file)
+
+        writer.writerow(
+            [
+                "Learner ID",
+                "Learner Name",
+                "Lessons Completed",
+                "Average Score",
+                "Current Streak",
+            ]
+        )
+
+        for learner in class_summary:
+            writer.writerow(
+                [
+                    learner["learner_id"],
+                    learner["learner_name"],
+                    learner["lessons_completed"],
+                    learner["average_score"],
+                    learner["current_streak"],
+                ]
+            )
+
+    return file_path

@@ -35,6 +35,7 @@ def _is_low_score(score: float) -> bool:
 def generate_feedback(
     assessment_result: Dict[str, float],
     is_correct: bool = False,
+    possible_issue: str | None = None,
 ) -> Dict[str, List[str] | str]:
 
     if not assessment_result:
@@ -69,6 +70,9 @@ def generate_feedback(
         encouragement = (
             "Good attempt! Practice the highlighted areas and try again."
         )
+
+    if possible_issue:
+        suggestions.insert(0, possible_issue)
 
     return {
         "status": encouragement,
