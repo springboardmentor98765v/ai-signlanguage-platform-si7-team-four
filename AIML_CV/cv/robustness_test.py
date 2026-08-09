@@ -13,8 +13,11 @@ from feature_extractor import FeatureExtractor
 from predict import predict_with_feedback
 import string
 
-# --- change this every run ---
-CONDITION = "bright_light"
+# --- change these every run ---
+CONDITION = "dim_light"
+TESTER = "person2"  # change per person, e.g. "person1", "person2" — needed
+                     # for Day 9's "tested across at least 2 different people"
+                     # checkpoint
 
 # Test all 26 uppercase alphabet letters
 
@@ -33,10 +36,10 @@ def run_session():
     log_file = open(LOG_PATH, "a", newline="")
     writer = csv.writer(log_file)
     if not file_exists:
-        writer.writerow(["timestamp", "condition", "target_label", "predicted_label",
+        writer.writerow(["timestamp", "condition", "tester", "target_label", "predicted_label",
                           "correct", "confidence", "hand_detected", "predict_ms"])
 
-    print(f"Condition: {CONDITION}")
+    print(f"Condition: {CONDITION}  Tester: {TESTER}")
     print("SPACE = capture, N = skip letter, Q = quit\n")
 
     import cv2  # local import keeps this file's top-level deps minimal
@@ -58,7 +61,7 @@ def run_session():
                 if results.hand_landmarks:
                     detector.draw_landmarks(display, results)
 
-                cv2.putText(display, f"Condition: {CONDITION}  Target: {label}",
+                cv2.putText(display, f"Condition: {CONDITION}  Tester: {TESTER}  Target: {label}",
                             (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                 cv2.putText(display, "SPACE=capture  N=skip  Q=quit",
                             (10, display.shape[0] - 15), cv2.FONT_HERSHEY_SIMPLEX,
@@ -76,7 +79,7 @@ def run_session():
                     results = detector.detect_hands(frame)
 
                     if not results.hand_landmarks:
-                        writer.writerow([datetime.now().isoformat(), CONDITION, label,
+                        writer.writerow([datetime.now().isoformat(), CONDITION, TESTER, label,
                                           None, False, 0.0, False, None])
                         log_file.flush()
                         print("  No hand detected — logged as a miss")
@@ -89,7 +92,7 @@ def run_session():
                     )
                     elapsed_ms = (time.perf_counter() - start) * 1000
 
-                    writer.writerow([datetime.now().isoformat(), CONDITION, label,
+                    writer.writerow([datetime.now().isoformat(), CONDITION, TESTER, label,
                                       predicted, correct, round(confidence, 4),
                                       True, round(elapsed_ms, 1)])
                     log_file.flush()
@@ -126,6 +129,14 @@ def summarize():
         print(f"  avg confidence: {avg_conf:.2f}")
         print(f"  avg prediction time: {avg_ms:.1f}ms")
     
+    print("\n=== Per-tester summary ===")
+    for tester, group in df.groupby("tester"):
+        detected = group["hand_detected"].astype(bool)
+        subset = group[detected]
+        accuracy = subset["correct"].astype(bool).mean() if len(subset) else float("nan")
+        print(f"\n{tester}  (n={len(group)})")
+        print(f"  accuracy (when hand detected): {accuracy:.0%}")
+
     print("\n=== Per-letter robustness summary ===")
     for label, group in df.groupby("target_label"):
         print(f"\nLetter {label}")
