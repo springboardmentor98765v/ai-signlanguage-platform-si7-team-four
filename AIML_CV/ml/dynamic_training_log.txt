@@ -1,0 +1,16 @@
+J: 25 samples
+  templates: 4, threshold: 2.593274500966072
+Z: 25 samples
+  templates: 4, threshold: 1.5561000041663646
+hello: 20 samples
+  templates: 4, threshold: 4.0052720457315445
+no: 20 samples
+  templates: 4, threshold: 7.71706885099411
+please: 20 samples
+  templates: 4, threshold: 10.18044126033783
+thank_you: 20 samples
+  templates: 4, threshold: 7.15553714632988
+yes: 20 samples
+  templates: 4, threshold: 3.45916129052639
+
+Saved dynamic templates to /content/ml/dynamic_templates.joblib
