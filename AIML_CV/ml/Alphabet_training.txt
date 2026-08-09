@@ -1,0 +1,228 @@
+Total raw samples: 14647
+label
+S      600
+K      598
+Z      595
+P      595
+D      594
+F      593
+Y      591
+O      590
+C      589
+Q      581
+R      581
+H      579
+G      575
+I      569
+T      562
+E      560
+U      557
+A      555
+V      555
+X      549
+B      538
+L      536
+W      511
+J      449
+M      397
+del    381
+N      267
+Name: count, dtype: int64
+
+Oversampling webcam data 3x (2013 -> 6039 rows) so it isn't drowned out by 9704 Kaggle rows
+Training samples after oversampling: 15743
+Test samples (untouched, no oversampling): 2930
+
+--- KNN ---
+CV accuracy (train set):  0.9825 +/- 0.0011
+Held-out test accuracy:   0.9829
+              precision    recall  f1-score   support
+
+           A       0.99      0.99      0.99       111
+           B       1.00      0.99      1.00       108
+           C       0.97      0.99      0.98       118
+           D       0.99      0.96      0.97       119
+           E       1.00      0.98      0.99       112
+           F       1.00      1.00      1.00       119
+           G       0.99      1.00      1.00       115
+           H       0.99      0.99      0.99       116
+           I       0.99      0.99      0.99       114
+           J       1.00      1.00      1.00        90
+           K       1.00      1.00      1.00       120
+           L       0.99      0.99      0.99       107
+           M       0.94      0.95      0.94        79
+           N       0.91      0.96      0.94        53
+           O       0.96      0.99      0.97       118
+           P       0.97      0.98      0.97       119
+           Q       0.99      0.98      0.99       116
+           R       0.98      0.98      0.98       116
+           S       0.98      0.99      0.98       120
+           T       0.98      0.98      0.98       113
+           U       0.98      0.96      0.97       111
+           V       0.99      0.99      0.99       111
+           W       0.98      0.97      0.98       102
+           X       0.97      0.95      0.96       110
+           Y       1.00      0.98      0.99       118
+           Z       0.97      0.99      0.98       119
+         del       0.99      0.95      0.97        76
+
+    accuracy                           0.98      2930
+   macro avg       0.98      0.98      0.98      2930
+weighted avg       0.98      0.98      0.98      2930
+
+
+--- RandomForest ---
+CV accuracy (train set):  0.9934 +/- 0.0009
+Held-out test accuracy:   0.9901
+              precision    recall  f1-score   support
+
+           A       0.99      0.99      0.99       111
+           B       1.00      0.99      1.00       108
+           C       0.98      0.99      0.99       118
+           D       0.99      0.99      0.99       119
+           E       1.00      0.99      1.00       112
+           F       0.99      1.00      1.00       119
+           G       1.00      0.99      1.00       115
+           H       1.00      0.99      1.00       116
+           I       1.00      1.00      1.00       114
+           J       0.99      1.00      0.99        90
+           K       1.00      1.00      1.00       120
+           L       1.00      0.99      1.00       107
+           M       0.96      1.00      0.98        79
+           N       0.98      0.96      0.97        53
+           O       0.97      0.97      0.97       118
+           P       0.98      0.98      0.98       119
+           Q       0.98      1.00      0.99       116
+           R       1.00      0.97      0.99       116
+           S       0.98      0.99      0.99       120
+           T       0.99      0.99      0.99       113
+           U       0.99      0.97      0.98       111
+           V       1.00      1.00      1.00       111
+           W       1.00      1.00      1.00       102
+           X       0.96      0.97      0.97       110
+           Y       1.00      0.98      0.99       118
+           Z       0.98      1.00      0.99       119
+         del       0.99      0.99      0.99        76
+
+    accuracy                           0.99      2930
+   macro avg       0.99      0.99      0.99      2930
+weighted avg       0.99      0.99      0.99      2930
+
+
+--- SVM ---
+CV accuracy (train set):  0.9846 +/- 0.0020
+Held-out test accuracy:   0.9867
+              precision    recall  f1-score   support
+
+           A       1.00      0.99      1.00       111
+           B       1.00      0.99      1.00       108
+           C       0.98      1.00      0.99       118
+           D       0.98      0.97      0.98       119
+           E       1.00      0.99      1.00       112
+           F       1.00      1.00      1.00       119
+           G       0.98      0.99      0.99       115
+           H       0.99      0.99      0.99       116
+           I       0.98      0.99      0.99       114
+           J       0.97      0.99      0.98        90
+           K       1.00      0.97      0.99       120
+           L       1.00      0.98      0.99       107
+           M       0.95      1.00      0.98        79
+           N       1.00      0.94      0.97        53
+           O       0.98      1.00      0.99       118
+           P       0.98      0.98      0.98       119
+           Q       1.00      1.00      1.00       116
+           R       0.96      0.98      0.97       116
+           S       0.99      0.99      0.99       120
+           T       0.99      0.99      0.99       113
+           U       0.96      0.96      0.96       111
+           V       1.00      0.98      0.99       111
+           W       0.98      0.99      0.99       102
+           X       0.97      0.95      0.96       110
+           Y       1.00      1.00      1.00       118
+           Z       0.98      0.99      0.99       119
+         del       0.99      0.99      0.99        76
+
+    accuracy                           0.99      2930
+   macro avg       0.99      0.99      0.99      2930
+weighted avg       0.99      0.99      0.99      2930
+
+
+--- XGBoost ---
+/usr/local/lib/python3.12/dist-packages/xgboost/training.py:200: UserWarning: [19:49:58] WARNING: /__w/xgboost/xgboost/src/learner.cc:793: 
+Parameters: { "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/usr/local/lib/python3.12/dist-packages/xgboost/training.py:200: UserWarning: [19:50:26] WARNING: /__w/xgboost/xgboost/src/learner.cc:793: 
+Parameters: { "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/usr/local/lib/python3.12/dist-packages/xgboost/training.py:200: UserWarning: [19:50:55] WARNING: /__w/xgboost/xgboost/src/learner.cc:793: 
+Parameters: { "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/usr/local/lib/python3.12/dist-packages/xgboost/training.py:200: UserWarning: [19:51:22] WARNING: /__w/xgboost/xgboost/src/learner.cc:793: 
+Parameters: { "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/usr/local/lib/python3.12/dist-packages/xgboost/training.py:200: UserWarning: [19:51:51] WARNING: /__w/xgboost/xgboost/src/learner.cc:793: 
+Parameters: { "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/usr/local/lib/python3.12/dist-packages/xgboost/training.py:200: UserWarning: [19:52:20] WARNING: /__w/xgboost/xgboost/src/learner.cc:793: 
+Parameters: { "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+CV accuracy (train set):  0.9926 +/- 0.0022
+Held-out test accuracy:   0.9870
+              precision    recall  f1-score   support
+
+           A       0.99      0.98      0.99       111
+           B       1.00      0.99      1.00       108
+           C       0.98      1.00      0.99       118
+           D       1.00      0.97      0.99       119
+           E       1.00      0.99      1.00       112
+           F       0.98      1.00      0.99       119
+           G       0.99      0.99      0.99       115
+           H       0.98      0.99      0.99       116
+           I       1.00      1.00      1.00       114
+           J       0.98      1.00      0.99        90
+           K       1.00      0.98      0.99       120
+           L       1.00      0.98      0.99       107
+           M       0.95      1.00      0.98        79
+           N       0.98      0.94      0.96        53
+           O       1.00      0.97      0.98       118
+           P       0.98      0.97      0.98       119
+           Q       0.98      1.00      0.99       116
+           R       0.97      0.99      0.98       116
+           S       0.98      0.99      0.98       120
+           T       0.98      0.99      0.99       113
+           U       1.00      0.97      0.99       111
+           V       1.00      1.00      1.00       111
+           W       1.00      0.99      1.00       102
+           X       0.95      0.97      0.96       110
+           Y       1.00      0.98      0.99       118
+           Z       0.97      0.99      0.98       119
+         del       0.99      0.97      0.98        76
+
+    accuracy                           0.99      2930
+   macro avg       0.99      0.99      0.99      2930
+weighted avg       0.99      0.99      0.99      2930
+
+
+=== Comparison summary ===
+RandomForest     CV: 0.9934   Test: 0.9901
+XGBoost          CV: 0.9926   Test: 0.9870
+SVM              CV: 0.9846   Test: 0.9867
+KNN              CV: 0.9825   Test: 0.9829
+
+Best model: RandomForest (test accuracy 0.9901)
+Confusion matrix saved to /content/ml/confusion_matrix.png
+
+Weakest letters (lowest recall):
+  N: 0.96
+  X: 0.97
+  U: 0.97
+  R: 0.97
+  O: 0.97
+Saved to /content/ml/sign_model.joblib
+Could not save to Google Drive: 'NoneType' object has no attribute 'kernel'
