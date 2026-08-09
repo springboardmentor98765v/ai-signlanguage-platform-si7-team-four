@@ -31,6 +31,31 @@ from app.models import models
 # Ensure all database tables exist on startup
 Base.metadata.create_all(bind=engine)
 
+
+def _apply_sqlite_schema_migrations():
+    """
+    Idempotent dev-only migrations for the local SQLite file (app_data.db).
+
+    create_all() adds new tables but not new columns to existing tables, so
+    columns added after the DB file already exists need an explicit ALTER TABLE.
+    """
+    import sqlite3
+    from pathlib import Path
+
+    # Resolve relative to the package (Backend/), not the process CWD, so the
+    # migration always targets the backend's own app_data.db.
+    db_path = Path(__file__).resolve().parent.parent / "app_data.db"
+    try:
+        with sqlite3.connect(db_path) as conn:
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
+            if "instructor_id" not in cols:
+                conn.execute("ALTER TABLE users ADD COLUMN instructor_id VARCHAR(36)")
+    except Exception:
+        pass
+
+
+_apply_sqlite_schema_migrations()
+
 app = FastAPI(
     title="AI Sign Language Platform API",
     description="Final Production-Frozen API documentation for cross-team integration (Frontend, AI, and Business Logic).",

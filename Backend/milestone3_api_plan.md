@@ -248,7 +248,7 @@ curl against `http://127.0.0.1:8000`.
   exercised through the same request/response surface as the Docker stack.
 - To run against the real Docker Compose stack instead, set
   `INTEGRATION_BASE_URL=http://127.0.0.1:8000` after `docker compose up -d`.
-- The full suite (`python3 -m pytest -q` in `Backend/`) passes: 84 tests, including the
+- The full suite (`python3 -m pytest -q` in `Backend/`) passes: 87 tests, including the
   4 new integration journeys run twice back-to-back with no flakiness.
 - Remaining (tracked, not required on Day 8): wire a `docker compose up -d` + integration
   pytest stage into a CI check (`.github/workflows/`).
@@ -352,8 +352,9 @@ Wiring status (Day 3):
 
 ### 5.1 Full automated test suite - PASSING
 
-- Final run: `pytest Backend/ -v` from repo root -> **84 passed** (previously 80 after Days 6-7,
-  plus 4 full-journey integration tests from Day 8). Command used for the Day 10 walkthrough:
+- Final run: `pytest Backend/ -v` from repo root -> **87 passed** (80 after Days 6-7, plus 4
+  full-journey integration tests from Day 8, plus 3 new instructor-management regression tests
+  from the Day-10 bug fix). Command used for the Day 10 walkthrough:
   `python3 -m pytest Backend/ -q` and `python3 -m pytest Backend/ -v`.
 - Warning cleanup: registered the `integration` pytest marker in `Backend/pytest.ini`
   (removes the `PytestUnknownMarkWarning` from the Day-8 journey tests).
@@ -388,10 +389,24 @@ Wiring status (Day 3):
    event hooks (`badge_earned`, `certificate_ready`, `new_recommendation`) are fully wired in
    `assessment_service`, `certificate_service`, `recommendation_service` and are tested in
    `Backend/test_milestone3_day3.py`.
+6. **Day-10 live sweep bug: broken Instructor-Student Management** (found during the full
+   `/docs` endpoint sweep). `User` had **no `instructor_id` column**, so
+   `POST /api/instructor/assign-student` returned 200 but silently did NOT persist the
+   assignment, and `GET /api/instructor/students/{instructor_email}` raised
+   `AttributeError: type object 'User' has no attribute 'instructor_id'` -> HTTP 500.
+   **Fixed**: added `instructor_id = Column(UUID, ForeignKey("users.id"), nullable=True)` to the
+   `User` model, plus an idempotent SQLite migration in `app/main.py`
+   (`_apply_sqlite_schema_migrations`, ALTER TABLE users ADD COLUMN instructor_id) for the
+   existing `app_data.db`. Verified live: assign-student now persists and the students list
+   returns the assigned student. Regression tests added in `Backend/test_instructor_management.py`
+   (3 tests). Suite now **87 passed**.
+7. **Sweep results**: all 48 endpoint probes against the live server returned correct behavior
+   (the only non-2xx is `forgot-password` returning the expected 404 for an unregistered email;
+   a registered email returns 200). No other broken endpoints remain.
 
 ### 5.4 Backend contribution to the Day 10 integration walkthrough
 
 - Backend provides: live Swagger UI `/docs`, the frozen `/openapi.json`, the cross-team
-  contract in `Backend/docs/frontend_integration_notes.md`, and 84 green tests covering the
+  contract in `Backend/docs/frontend_integration_notes.md`, and 87 green tests covering the
   full M3 surface (auth, RBAC dashboards, notifications, admin bulk + CSV upload, practice,
   rate limiting 429, and 4 full-journey flows).

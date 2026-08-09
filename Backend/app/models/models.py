@@ -20,6 +20,7 @@ class User(Base):
     role = Column(String(20), nullable=False, default="Learner")
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    instructor_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=True)
 
     sessions = relationship("PracticeSession", back_populates="user")
     analytics = relationship("AnalyticsSummary", back_populates="user", uselist=False)
