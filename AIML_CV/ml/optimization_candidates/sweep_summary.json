@@ -1,0 +1,50 @@
+[
+  {
+    "name": "baseline_full",
+    "n_features": 78,
+    "n_estimators": 200,
+    "accuracy": 0.9901023890784983,
+    "latency_ms": 9.773453996749595,
+    "size_kb": 5587.1181640625
+  },
+  {
+    "name": "trim_drop20",
+    "n_features": 58,
+    "n_estimators": 200,
+    "accuracy": 0.9897610921501706,
+    "latency_ms": 21.380743499612436,
+    "size_kb": 5318.609375
+  },
+  {
+    "name": "trim_drop30",
+    "n_features": 48,
+    "n_estimators": 200,
+    "accuracy": 0.9887372013651877,
+    "latency_ms": 20.0552930025151,
+    "size_kb": 5332.3056640625
+  },
+  {
+    "name": "trim_drop40",
+    "n_features": 38,
+    "n_estimators": 200,
+    "accuracy": 0.9877133105802047,
+    "latency_ms": 19.46849499596283,
+    "size_kb": 5102.2802734375
+  },
+  {
+    "name": "trim_drop20_trees100",
+    "n_features": 58,
+    "n_estimators": 100,
+    "accuracy": 0.9901023890784983,
+    "latency_ms": 10.557527000200935,
+    "size_kb": 2648.2998046875
+  },
+  {
+    "name": "trim_drop20_trees50",
+    "n_features": 58,
+    "n_estimators": 50,
+    "accuracy": 0.9887372013651877,
+    "latency_ms": 4.753861500066705,
+    "size_kb": 1334.89453125
+  }
+]
