@@ -144,49 +144,74 @@ export default function Practice() {
       base64Image = canvas.toDataURL('image/jpeg', 0.8);
     }
 
+    // Retrieve active User & Lesson IDs from LocalStorage
+    const user = JSON.parse(localStorage.getItem('user'));
+    const userId = user?.id || user?.user_id || 1;
+    const lessonId = 1;
+
     try {
-      const response = await fetch('http://localhost:8000/api/practice/predict', {
+      // UPDATED ENDPOINT: /api/practice/submit
+      const response = await fetch('http://localhost:8000/api/practice/submit', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
         },
         body: JSON.stringify({
+          user_id: userId,
+          lesson_id: lessonId,
           target_letter: selectedLetter,
           image_data: base64Image,
         }),
       });
 
       if (!response.ok) {
-        throw new Error('Backend server unreachable');
+        throw new Error(`Server returned ${response.status}`);
       }
 
       const data = await response.json();
       
-      const newPrediction = {
-        predicted_sign: data.predicted_sign || selectedLetter,
-        confidence: data.confidence || 92,
-        feedback: data.feedback || 'Great job! Hand posture matches target gesture accurately.',
-      };
+      // Parse output gracefully across mock schema and real AI service schema
+      const predicted = data.predicted_sign || data.metrics?.predicted_sign || selectedLetter;
+      
+      let confScore = 85;
+      if (typeof data.confidence === 'number') {
+        confScore = data.confidence <= 1 ? Math.round(data.confidence * 100) : Math.round(data.confidence);
+      } else if (data.metrics?.confidence_percentage) {
+        confScore = Math.round(data.metrics.confidence_percentage);
+      }
 
-      setPrediction(newPrediction);
-      setMetrics({
-        handShape: data.metrics?.hand_shape || 94,
-        fingerPosition: data.metrics?.finger_position || 88,
-        timingAlignment: data.metrics?.timing || 91,
+      const feedbackText = data.possible_issue 
+        || data.feedback 
+        || (data.correct !== false 
+            ? `Great job! Hand posture matches target '${selectedLetter}' accurately.` 
+            : `Keep practicing sign '${selectedLetter}'! Adjust your finger alignment.`);
+
+      setPrediction({
+        predicted_sign: predicted,
+        confidence: confScore,
+        feedback: feedbackText,
       });
 
-      if (newPrediction.confidence > 85) {
+      setMetrics({
+        handShape: data.metrics?.hand_shape_match || data.metrics?.hand_shape || (confScore > 80 ? 92 : 60),
+        fingerPosition: data.metrics?.finger_position || (confScore > 80 ? 88 : 55),
+        timingAlignment: data.metrics?.timing || 90,
+      });
+
+      if (confScore > 80) {
         setModalData({
           title: 'High Accuracy Achieved!',
-          message: `Incredible precision! You matched Sign '${selectedLetter}' with over ${newPrediction.confidence}% confidence.`,
+          message: `Incredible precision! You matched Sign '${selectedLetter}' with ${confScore}% confidence.`,
           icon: '🏆'
         });
         setShowPopup(true);
       }
 
     } catch (err) {
-      // Fallback Simulation Engine
+      console.warn("Backend connection issue, running local simulation fallback:", err);
+
+      // Fallback Simulation Engine if backend service is unreachable
       setTimeout(() => {
         const isCorrect = Math.random() > 0.25;
         const confidenceScore = isCorrect
