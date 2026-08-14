@@ -11,6 +11,7 @@ import Leaderboard from './pages/Leaderboard';
 import InstructorDashboard from './pages/InstructorDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import ReportsCertificate from './pages/ReportsCertificate';
+import AccessibilityTrainerDashboard from './pages/AccessibilityTrainerDashboard';
 
 const ProtectedRoute = ({ children, allowedRoles, userRole, isAuthenticated }) => {
   if (!isAuthenticated) {
@@ -112,6 +113,10 @@ export default function App() {
                   <Link to="/instructor" className="nav-item">Instructor</Link>
                 )}
 
+                {(userRole === 'Accessibility Trainer' || userRole === 'Administrator') && (
+                  <Link to="/trainer-dashboard" className="nav-item">Trainer</Link>
+                )}
+
                 {userRole === 'Administrator' && (
                   <Link to="/admin" className="nav-item">Admin</Link>
                 )}
@@ -181,6 +186,12 @@ export default function App() {
             <Route path="/instructor" element={
               <ProtectedRoute isAuthenticated={isAuthenticated} allowedRoles={['Instructor', 'Administrator']} userRole={userRole}>
                 <InstructorDashboard />
+              </ProtectedRoute>
+            } />
+
+            <Route path="/trainer-dashboard" element={
+              <ProtectedRoute isAuthenticated={isAuthenticated} allowedRoles={['Accessibility Trainer', 'Administrator']} userRole={userRole}>
+                <AccessibilityTrainerDashboard />
               </ProtectedRoute>
             } />
 
