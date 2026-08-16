@@ -3,6 +3,13 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+
+class PracticeImageSubmissionRequest(BaseModel):
+    """Request body for submitting a base64‑encoded image to the AI service."""
+    session_id: str = Field(..., min_length=1, max_length=80)
+    image_data: str = Field(..., description="Base64 data URL, e.g. 'data:image/jpeg;base64,...'")
+
+
 """
 Practice Service response schemas (shown in Swagger /docs).
 """

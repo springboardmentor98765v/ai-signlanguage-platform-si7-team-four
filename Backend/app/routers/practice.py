@@ -10,6 +10,7 @@ from app.schemas.practice import (
     PracticeSessionResponse,
     PracticeEndResponse,
     PracticeSubmitResponse,
+    PracticeImageSubmissionRequest,
 )
 import uuid
 
@@ -86,32 +87,43 @@ def end_practice(
         "UUID session_id; 400 if malformed, 404 if the session does not exist."
     ),
 )
-def submit_practice_frame(payload: FrameSubmissionRequest, db: Session = Depends(get_db)):
-    # Convert session_id to UUID object for validation
+
+def submit_practice_frame(
+    payload: PracticeImageSubmissionRequest,
+    db: Session = Depends(get_db)
+) -> PracticeSubmitResponse:
+    """Submit an image for AI prediction.
+    Takes a base64‑encoded image, decodes it, and forwards it as multipart/form‑data
+    to the external AI service (`http://ai-service:8001/predict`). The service returns
+    the prediction which is relayed back to the client.
+    """
+    # Validate session exists
     try:
         session_uuid = uuid.UUID(payload.session_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="session_id must be a valid UUID format.")
-
     session = db.query(models.PracticeSession).filter(models.PracticeSession.id == str(session_uuid)).first()
     if not session:
         raise HTTPException(status_code=404, detail="Active practice session context missing")
 
-    # Mock analysis
-    mock_confidence = 96.4
-    mock_score = 90.0
+    # Decode base64 image data (expects a data URL prefix)
+    import base64, re
+    match = re.match(r"data:image/.+;base64,(.*)", payload.image_data)
+    if not match:
+        raise HTTPException(status_code=400, detail="Invalid image_data format; must be base64 data URL.")
+    try:
+        image_bytes = base64.b64decode(match.group(1))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Failed to decode base64 image.")
 
-    session.status = "completed"
-    db.commit()
-
-    return {
-        "status": "success",
-        "session_id": str(session.id),
-        "metrics": {
-            "predicted_sign": "A",
-            "confidence_percentage": mock_confidence,
-            "overall_accuracy_score": mock_score,
-            "hand_shape_match": True
-        },
-        "feedback": "Keep your thumb closer to the palm for structural clarity."
-    }
+    # Forward to AI service
+    import httpx
+    files = {"file": ("image.jpg", image_bytes, "image/jpeg")}
+    try:
+        ai_resp = httpx.post("http://ai-service:8001/predict", files=files, timeout=10.0)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"AI service request failed: {exc}")
+    if ai_resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="AI service returned error response")
+    # Expect the AI service to return the same schema as PracticeSubmitResponse
+    return ai_resp.json()
