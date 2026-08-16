@@ -5,12 +5,14 @@
 # (e.g. python:3.11.9-slim-bookworm@sha256:...) and pin the pip packages in
 # Backend/requirements.txt to exact versions.
 #
-# The image assembles the app from three source trees that the milestones
-# split the backend into:
-#   Backend/app            - main.py, models, schemas, utils, most routers
-#   BD_Logic/app/routers   - business-logic routers (same-named files win)
-#   BD_Logic/app/services  - business-logic services
-#   Database_Devops/app/db - db layer that reads DATABASE_URL (PostgreSQL)
+# The image is the canonical FastAPI app from Backend/ (self-contained: all
+# routers/services/models live under Backend/app and main.py imports them
+# directly). The Database_Devops db layer is swapped in so the container reads
+# DATABASE_URL (PostgreSQL) instead of the local SQLite default.
+#
+# NOTE: BD_Logic/app/routers|services are intentionally NOT overlaid onto the
+# image. Their older `practice` router used /practice/* and dropped /submit,
+# which clobbered the frozen /api/practice/* API (fixed on Day 7).
 FROM python:3.11.9-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -28,11 +30,10 @@ COPY Database_Devops/requirements.txt ./req-db.txt
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r req-backend.txt -r req-db.txt
 
-# Business logic routers/services and the DB layer are layered on top of
-# Backend/app so app.main:app can import the full merged router set.
+# Copy the canonical app, then swap in the env-driven (DATABASE_URL /
+# PostgreSQL) db layer from Database_Devops so the container connects to the
+# provisioned database instead of the local SQLite file.
 COPY Backend/app ./app
-COPY BD_Logic/app/routers ./app/routers
-COPY BD_Logic/app/services ./app/services
 COPY Database_Devops/app/db ./app/db
 
 EXPOSE $PORT

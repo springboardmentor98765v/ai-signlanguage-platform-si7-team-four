@@ -137,21 +137,23 @@ def login_user(
     """
     Day 4 Upgraded Deliverable: Validates credentials and returns cryptographic access & refresh tokens.
     """
-    # Fallback to check real database if MOCK_USER_DB was wiped on server restart
-    user_record = MOCK_USER_DB.get(login_data.email)
-    
-    if not user_record:
-        db_user = db.query(User).filter(User.email == login_data.email).first()
-        if db_user:
-            # Re-sync into mock dict dynamically so login succeeds
-            MOCK_USER_DB[db_user.email] = {
-                "user_id": str(db_user.id),
-                "username": db_user.username,
-                "email": db_user.email,
-                "password": db_user.password_hash,
-                "role": db_user.role
-            }
-            user_record = MOCK_USER_DB.get(login_data.email)
+    # The real database is the source of truth: read the user's current row so
+    # admin role/status changes are picked up on the NEXT login (the in-memory
+    # MOCK_USER_DB snapshot can otherwise go stale). MOCK is kept in sync and is
+    # only used as a fallback for accounts that predate the DB-backed users.
+    user_record = None
+    db_user = db.query(User).filter(User.email == login_data.email).first()
+    if db_user is not None:
+        user_record = {
+            "user_id": str(db_user.id),
+            "username": db_user.username,
+            "email": db_user.email,
+            "password": db_user.password_hash,
+            "role": db_user.role
+        }
+        MOCK_USER_DB[login_data.email] = user_record
+    else:
+        user_record = MOCK_USER_DB.get(login_data.email)
 
     if not user_record:
         raise HTTPException(
