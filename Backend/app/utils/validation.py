@@ -17,7 +17,7 @@ from fastapi import HTTPException, status
 # Allowed-value sets (fixed contract)
 # ─────────────────────────────────────────────────────────
 
-ALLOWED_ROLES = {"Learner", "Instructor", "Admin"}
+ALLOWED_ROLES = {"Learner", "Instructor", "Accessibility Trainer", "Admin"}
 ALLOWED_CATEGORIES = {"alphabet", "words", "numbers", "greetings", "phrases", "general"}
 ALLOWED_DIFFICULTY = {"easy", "medium", "hard"}
 ALLOWED_NOTIFICATION_TYPES = {"info", "badge_earned", "certificate_ready", "new_recommendation"}

@@ -24,7 +24,7 @@ from app.routers.lessons import router as lessons_router
 from app.routers.admin_router import router as admin_router
 from app.routers.instructor_router import router as instructor_router
 from app.routers.notification_router import router as notification_router
-from app.routers import auth, course, practice
+from app.routers import auth, course, practice, trainer_router
 from app.db.database import engine, Base
 from app.models import models
 
@@ -127,6 +127,7 @@ app.include_router(notification_router)
 app.include_router(lessons_router)
 app.include_router(course.router)
 app.include_router(practice.router)
+app.include_router(trainer_router.router)
 
 @app.get("/health", tags=["System Health & Status"], summary="Health Check", description="Confirm the backend is up and environment variables loaded.")
 def health_check():

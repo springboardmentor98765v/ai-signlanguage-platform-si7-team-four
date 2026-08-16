@@ -37,7 +37,7 @@ class StatusUpdateRequest(BaseModel):
 
 class RoleUpdateRequest(BaseModel):
     target_email: str = Field(..., min_length=1, max_length=180)
-    new_role: str = Field(..., max_length=20)
+    new_role: str = Field(..., max_length=30)
 
     @field_validator("new_role")
     @classmethod

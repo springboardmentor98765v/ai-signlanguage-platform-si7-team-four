@@ -145,10 +145,46 @@ assessment analytics are weighted, where the certificate pass threshold is set) 
 
 ---
 
-## 5. Checkpoints
+## 6. Day 2 - Implemented (2026-08-16)
+
+All five trainer endpoints are built, registered in `app/main.py`, RBAC-protected
+with the same `verify_token_and_role(["Accessibility Trainer"])` pattern as the
+existing dashboards, and live in Swagger under the **Accessibility Trainer** tag:
+
+| Endpoint | Status |
+| :--- | :--- |
+| `GET /api/trainer/learners` | Live - assigned learners of the logged-in trainer |
+| `POST /api/trainer/assign-learner` | Live - links a Learner to the trainer (idempotent) |
+| `GET /api/trainer/learners/{id}/engagement` | Live - derived from `practice_sessions` |
+| `GET /api/trainer/learners/{id}/skill-development` | Live - derived from `assessments` + `weekly_analytics` |
+| `GET /api/trainer/learners/{id}/assessment-analytics` | Live - aggregated from `assessments` (incl. per-letter) |
+| `GET /api/trainer/learners/{id}/certification-status` | Live - from `certificates`; `not_attempted` when none |
+
+**Assignment mechanism decision (per Day-1 task):** a dedicated
+`TrainerLearnerLink` model (`trainer_id`, `learner_id`, `assigned_at`,
+table `trainer_learner_links`) was chosen over reusing `users.instructor_id`,
+because that column is Instructor-flavored and shared with the separate
+Instructor flow. A dedicated table keeps trainer assignments explicit and
+does not couple the roles. (Documented in the model docstring.)
+
+**Formula placeholders:** every metric in `app/services/trainer_service.py` is
+marked `# PENDING Intern 4 final formula`; response payloads carry
+`"formula_owner": "Intern 4 (pending)"` so frontend/QA know values may change.
+
+**Role change:** `"Accessibility Trainer"` added to `ALLOWED_ROLES`; role column
+widened to `String(30)` (21-char role); test suite covers register + RBAC 401/403.
+
+**Tests:** `Backend/test_trainer.py` added. Full suite: `python3 -m pytest -q`
+-> **92 passed** (87 existing + 5 trainer).
+
+---
+
+## 5. Checkpoints (updated Day 2)
 
 - [x] All existing APIs re-tested and confirmed working (62/62 live probes, 44/44 paths,
-      87 pytest green)
+      87 pytest green on Day 1)
 - [x] List of missing Accessibility Trainer APIs written (section 3)
-- [x] Plan for Day 2 agreed (section 4) - pending cross-team sign-off (Intern 4 formulas,
-      Intern 1 dashboard scope)
+- [x] Plan for Day 2 agreed (section 4) - implemented (section 6)
+- [x] "Get my assigned learners" API working for the Trainer role
+- [x] Engagement / skill / analytics / certification-status APIs working
+- [x] Access correctly restricted to the Accessibility Trainer role only (401/403 verified)

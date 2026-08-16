@@ -17,7 +17,7 @@ class User(Base):
     username = Column(String(80), unique=True, nullable=False)
     email = Column(String(180), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
-    role = Column(String(20), nullable=False, default="Learner")
+    role = Column(String(30), nullable=False, default="Learner")
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     instructor_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=True)
@@ -139,6 +139,23 @@ class InstructorStudent(Base):
     id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
     instructor_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
     student_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+
+    assigned_at = Column(DateTime, default=datetime.utcnow)
+
+
+class TrainerLearnerLink(Base):
+    """
+    Milestone 4: Accessibility Trainer -> Learner assignment.
+
+    One row per (trainer, learner) pair. `users.instructor_id` was considered but is
+    Instructor-flavored and shared with a different role flow; a dedicated link table
+    keeps Trainer assignments explicit and independently queryable.
+    """
+    __tablename__ = "trainer_learner_links"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
+    trainer_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    learner_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
 
     assigned_at = Column(DateTime, default=datetime.utcnow)
 
