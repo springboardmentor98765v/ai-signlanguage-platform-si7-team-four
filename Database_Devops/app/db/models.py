@@ -31,7 +31,10 @@ class User(Base):
     notifications = relationship("Notification", back_populates="user")
     user_badges = relationship("UserBadge", back_populates="user")
     streak = relationship("Streak", back_populates="user", uselist=False)
-
+    certification_exam_results = relationship("CertificationExamResult", back_populates="user")
+    trainer_assignments = relationship("AccessibilityTrainerLearner", foreign_keys="AccessibilityTrainerLearner.trainer_id", back_populates="trainer")
+    learner_assignments = relationship("AccessibilityTrainerLearner", foreign_keys="AccessibilityTrainerLearner.learner_id", back_populates="learner")
+    certification_exam_result = relationship("CertificationExamResult", back_populates="certificate", uselist=False)
 class Course(Base):
     __tablename__ = "courses"
     id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
@@ -207,5 +210,36 @@ class Streak(Base):
 
     user = relationship("User", back_populates="streak")
 
+class CertificationExamResult(Base):
+    __tablename__ = "certification_exam_results"
+    __table_args__ = (Index("ix_cert_exam_level_passed", "level", "passed"),)
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
+    user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False, index=True)
+    level = Column(String(20), nullable=False)
+    signs_tested = Column(Text, nullable=True)
+    score = Column(Float, nullable=False)
+    max_score = Column(Float, nullable=False)
+    passed = Column(Boolean, default=False, nullable=False)
+    started_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+    certificate_id = Column(UUID(as_uuid=False), ForeignKey("certificates.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="certification_exam_results")
+    certificate = relationship("Certificate", back_populates="certification_exam_result")
+
+
+class AccessibilityTrainerLearner(Base):
+    __tablename__ = "accessibility_trainer_learner"
+    __table_args__ = (UniqueConstraint("trainer_id", "learner_id", name="uq_trainer_learner"),)
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
+    trainer_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False, index=True)
+    learner_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False, index=True)
+    assigned_at = Column(DateTime, default=datetime.utcnow)
+
+    trainer = relationship("User", foreign_keys=[trainer_id], back_populates="trainer_assignments")
+    learner = relationship("User", foreign_keys=[learner_id], back_populates="learner_assignments")
 
 Index("ix_streaks_current_streak_count", Streak.current_streak_count)
