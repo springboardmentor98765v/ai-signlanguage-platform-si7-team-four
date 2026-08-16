@@ -493,40 +493,4 @@ export default function Practice() {
       </div>
     </div>
   );
-<<<<<<< HEAD
-=======
-}
-
-
-function PopupModal({ isOpen, onClose, title, message, badgeIcon = '🎉' }) {
-  if (!isOpen) return null;
-
-  return (
-    <div className="popup-overlay" onClick={onClose}>
-      <div className="popup-card" onClick={(e) => e.stopPropagation()}>
-        {/* Animated Badge Icon Header */}
-        <div style={{ fontSize: '3rem', marginBottom: '0.5rem', animation: 'popIn 0.5s ease' }}>
-          {badgeIcon}
-        </div>
-
-        {/* Title */}
-        <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '0.5rem' }}>
-          {title}
-        </h2>
-
-        {/* Message */}
-        <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '1.5rem', lineHeight: '1.5' }}>
-          {message}
-        </p>
-
-        {/* Actions */}
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem' }}>
-          <button onClick={onClose} className="btn-primary" style={{ padding: '0.6rem 1.5rem', fontWeight: 700 }}>
-            Got it!
-          </button>
-        </div>
-      </div>
-    </div>
-  );
->>>>>>> 9f7bbe7 (Milestone 3 – Day 1 backend updates: fixed /submit endpoint, added image schema)
 }
