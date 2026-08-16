@@ -1,0 +1,68 @@
+# =============================================================================
+# Render blueprint (free tier) — AI Sign Language Platform
+# -----------------------------------------------------------------------------
+# Deploy by pushing this repo to GitHub, then on Render:
+#   New -> Blueprint -> connect the repo -> "Apply".
+# Render will create the free PostgreSQL database + the backend web service and
+# wire DATABASE_URL automatically.
+#
+# Primary: backend  (FastAPI via Dockerfile.backend)
+# Optional: ai-service (Dockerfile.ai) needed only for practice/gesture features.
+#
+# See Backend/docs/deployment_guide.md for the full step-by-step guide.
+# =============================================================================
+
+databases:
+  - name: signlang-db
+    plan: free                # NOTE: Render's free DB expires after 30 days.
+    databaseName: signlang
+    user: signlang
+
+services:
+  # --- Backend API ------------------------------------------------------------
+  - type: web
+    name: signlang-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile.backend
+    plan: free                # 512 MB RAM -> keep WEB_CONCURRENCY=1 (below).
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: signlang-db
+          property: connectionString
+      # Secrets: leave blank here and set real values in the Render dashboard
+      # (they are marked sync:false so Render never stores them in the repo).
+      - key: SECRET_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      # CORS: replace "*" with the live frontend origin once Intern 1's
+      # frontend is deployed, e.g. https://signlang-frontend.onrender.com
+      - key: ALLOWED_ORIGINS
+        value: "*"
+      # Point at the deployed AI service URL (optional) once it is live,
+      # e.g. https://signlang-ai.onrender.com
+      - key: AI_SERVICE_URL
+        value: http://127.0.0.1:8001
+      # One worker keeps the free 512 MB instance under memory pressure.
+      - key: WEB_CONCURRENCY
+        value: "1"
+      - key: PDF_OUTPUT_DIR
+        value: /tmp/certificates
+      # Optional email for forgot-password/reset flows.
+      - key: EMAIL_HOST
+        value: smtp.gmail.com
+      - key: EMAIL_APP_PASSWORD
+        sync: false
+
+  # --- AI / MediaPipe service (OPTIONAL) --------------------------------------
+  # Only needed for /api/practice/submit and gesture evaluation. Requires the
+  # free instance's memory (base OpenCV/MediaPipe) — deploy after the backend.
+  - type: web
+    name: signlang-ai
+    runtime: docker
+    dockerfilePath: ./Dockerfile.ai
+    plan: free
+    autoDeploy: true
