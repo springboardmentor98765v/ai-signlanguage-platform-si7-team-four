@@ -23,7 +23,7 @@ class ProgressResponse(BaseModel):
     completed_lessons: int
     total_lessons: int
     accuracy_score: float
-    last_updated: str
+    last_updated: datetime
 
     class Config:
         orm_mode = True
@@ -42,7 +42,7 @@ def get_user_progress(user_id: int, db: Session = Depends(get_db)):
             "completed_lessons": 8,
             "total_lessons": 10,
             "accuracy_score": 92.5,
-            "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "last_updated": datetime.now()
         }
     ]
     return sample_progress
@@ -71,5 +71,5 @@ def completion_metrics(progress: ProgressCreate):
     return {
         "total_lessons": progress.total_lessons,
         "accuracy_score": progress.accuracy_score,
-        "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "last_updated": datetime.now()
     }

@@ -22,7 +22,7 @@ class TranslationResponse(BaseModel):
     user_id: int
     translated_text: str
     confidence_level: float
-    timestamp: str
+    timestamp: datetime
 
     class Config:
         from_attributes = True
@@ -39,14 +39,14 @@ def get_translation_history(user_id: int):
             "user_id": user_id,
             "translated_text": "Hello, welcome to sign language platform",
             "confidence_level": 0.96,
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "timestamp": datetime.now()
         },
         {
             "id": 102,
             "user_id": user_id,
             "translated_text": "Thank you for your assistance",
             "confidence_level": 0.91,
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "timestamp": datetime.now()
         }
     ]
     return mock_history
@@ -65,5 +65,5 @@ def log_new_translation(record: TranslationRecord):
         "user_id": record.user_id,
         "translated_text": record.translated_text,
         "confidence_level": record.confidence_level,
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "timestamp": datetime.now()
     }

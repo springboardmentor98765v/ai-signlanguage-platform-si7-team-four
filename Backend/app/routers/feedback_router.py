@@ -24,7 +24,7 @@ class FeedbackResponse(BaseModel):
     category: str
     rating: int
     comments: str
-    submitted_at: str
+    submitted_at: datetime
 
     class Config:
         from_attributes = True
@@ -37,7 +37,7 @@ FEEDBACK_DB = [
         "category": "Gesture Recognition",
         "rating": 5,
         "comments": "The real-time translation accuracy has improved significantly!",
-        "submitted_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "submitted_at": datetime.now()
     }
 ]
 
@@ -53,7 +53,7 @@ def submit_feedback(feedback: FeedbackCreate):
         "category": feedback.category,
         "rating": feedback.rating,
         "comments": feedback.comments,
-        "submitted_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "submitted_at": datetime.now()
     }
     FEEDBACK_DB.append(new_record)
     return new_record

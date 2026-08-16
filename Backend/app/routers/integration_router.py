@@ -29,8 +29,8 @@ def test_frontend_business_logic_sync(payload: FrontendSyncPayload):
         "status": "success",
         "message": "Data format compatibility verified successfully.",
         "received_data": {
-            "userId": payload.user_id,
-            "actionType": payload.action_type,
-            "confidenceScore": payload.confidence_score
+            "user_id": payload.user_id,
+            "action_type": payload.action_type,
+            "confidence_score": payload.confidence_score
         }
     }

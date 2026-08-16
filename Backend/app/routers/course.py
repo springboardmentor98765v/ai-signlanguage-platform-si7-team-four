@@ -101,6 +101,7 @@ def create_custom_module(
     
     # Storing data using the keys from your schema: module_input.title and module_input.description
     MOCK_MODULE_DB[new_id] = {
+        "module_id": new_id,
         "course_id": new_id,
         "title": module_input.title,
         "description": module_input.description
@@ -108,6 +109,7 @@ def create_custom_module(
     
     # Returning the response
     return ModuleResponse(
+        module_id=new_id,
         course_id=new_id, 
         title=module_input.title, 
         description=module_input.description, 
