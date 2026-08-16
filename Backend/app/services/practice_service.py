@@ -1,14 +1,32 @@
 
 from datetime import datetime
+import uuid as uuid_lib
 
 from sqlalchemy.orm import Session
 
 from app.models.models import PracticeSession
 
+
+def _as_uuid(value):
+    """Coerce a value into a canonical hyphenated UUID string.
+
+    Guards against numeric-looking ids (e.g. the frontend sending lesson_id=1).
+    SQLite's NUMERIC column affinity stores such values as INTEGER, which then
+    breaks the UUID result processor on read (uuid.UUID(int) fails). Mapping
+    them to a deterministic UUID keeps every UUID column stored as TEXT.
+    """
+    if value is None:
+        return None
+    try:
+        return str(uuid_lib.UUID(str(value)))
+    except (ValueError, AttributeError, TypeError):
+        return str(uuid_lib.uuid5(uuid_lib.NAMESPACE_DNS, str(value)))
+
+
 def start_session(db: Session, user_id: str, lesson_id: str) -> dict:
     session = PracticeSession(
-        user_id=user_id,
-        lesson_id=lesson_id,
+        user_id=_as_uuid(user_id),
+        lesson_id=_as_uuid(lesson_id),
         status="in_progress",
         attempt_count=0,
         started_at=datetime.utcnow(),

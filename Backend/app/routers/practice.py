@@ -1,8 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
 
-from pydantic import BaseModel, Field
 from app.db.database import get_db
 from app.services import practice_service
 from app.models import models
@@ -15,18 +13,6 @@ from app.schemas.practice import (
 import uuid
 
 router = APIRouter(prefix="/api/practice", tags=["Practice Service"])
-
-
-# Schema representing mock real-time image frame landmarks
-class LandmarkPoint(BaseModel):
-    x: float = Field(..., ge=-10.0, le=10.0)
-    y: float = Field(..., ge=-10.0, le=10.0)
-    z: float = Field(..., ge=-10.0, le=10.0)
-
-
-class FrameSubmissionRequest(BaseModel):
-    session_id: str = Field(..., min_length=1, max_length=80)
-    landmarks: List[LandmarkPoint] = Field(..., min_length=1, max_length=500)
 
 
 @router.post(
@@ -82,9 +68,13 @@ def end_practice(
     status_code=status.HTTP_200_OK,
     summary="Submit a Practice Frame for AI Feedback",
     description=(
-        "Submits a set of hand-landmark coordinates for a practice session and "
-        "returns mock AI gesture-recognition metrics and feedback. Requires a valid "
-        "UUID session_id; 400 if malformed, 404 if the session does not exist."
+        "Accepts a raw base64-encoded image from the frontend, decodes it, and "
+        "forwards it as multipart/form-data to the Python AI service "
+        "(`ai-service:8001/predict`). The AI service extracts hand landmarks with "
+        "MediaPipe, generates features, and runs the trained model; the resulting "
+        "prediction is relayed back to the client. Requires a valid UUID "
+        "session_id (or user_id + lesson_id to auto-start one); 400 if the image "
+        "data is malformed, 404 if the session does not exist."
     ),
 )
 
@@ -92,19 +82,33 @@ def submit_practice_frame(
     payload: PracticeImageSubmissionRequest,
     db: Session = Depends(get_db)
 ) -> PracticeSubmitResponse:
-    """Submit an image for AI prediction.
-    Takes a base64‑encoded image, decodes it, and forwards it as multipart/form‑data
-    to the external AI service (`http://ai-service:8001/predict`). The service returns
-    the prediction which is relayed back to the client.
     """
-    # Validate session exists
-    try:
-        session_uuid = uuid.UUID(payload.session_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="session_id must be a valid UUID format.")
-    session = db.query(models.PracticeSession).filter(models.PracticeSession.id == str(session_uuid)).first()
-    if not session:
-        raise HTTPException(status_code=404, detail="Active practice session context missing")
+    Relay a raw hand image to the AI service for prediction.
+
+    Flow enforced here (landmark extraction happens ONLY in the AI service):
+        Browser -> raw image (base64) -> /submit -> decode -> multipart ->
+        ai-service:8001/predict -> MediaPipe landmarks -> features -> model ->
+        prediction -> relayed back.
+    """
+    session_id = payload.session_id
+
+    if session_id:
+        # Validate the provided session belongs to a real practice record.
+        try:
+            session_uuid = uuid.UUID(session_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="session_id must be a valid UUID format.")
+        session = db.query(models.PracticeSession).filter(models.PracticeSession.id == str(session_uuid)).first()
+        if not session:
+            raise HTTPException(status_code=404, detail="Active practice session context missing")
+    else:
+        # The frontend may omit session_id; auto-start an in-progress session.
+        if not payload.user_id or not payload.lesson_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Either session_id or both user_id and lesson_id are required.",
+            )
+        session_id = practice_service.start_session(db, payload.user_id, payload.lesson_id)["session_id"]
 
     # Decode base64 image data (expects a data URL prefix)
     import base64, re
@@ -116,14 +120,27 @@ def submit_practice_frame(
     except Exception:
         raise HTTPException(status_code=400, detail="Failed to decode base64 image.")
 
-    # Forward to AI service
-    import httpx
+    # Forward the RAW image to the AI service (landmark extraction is done there).
+    import httpx, os
+    ai_url = os.getenv("AI_SERVICE_URL", "http://ai-service:8001").rstrip("/")
     files = {"file": ("image.jpg", image_bytes, "image/jpeg")}
+    data = {}
+    if payload.target_letter:
+        data["target_sign"] = payload.target_letter
     try:
-        ai_resp = httpx.post("http://ai-service:8001/predict", files=files, timeout=10.0)
+        ai_resp = httpx.post(f"{ai_url}/predict", files=files, data=data, timeout=10.0)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"AI service request failed: {exc}")
     if ai_resp.status_code != 200:
         raise HTTPException(status_code=502, detail="AI service returned error response")
-    # Expect the AI service to return the same schema as PracticeSubmitResponse
-    return ai_resp.json()
+
+    ai = ai_resp.json()
+    return PracticeSubmitResponse(
+        status="success",
+        session_id=session_id,
+        predicted_sign=ai.get("predicted_sign"),
+        confidence=float(ai.get("confidence") or 0.0),
+        hand_detected=bool(ai.get("hand_detected", False)),
+        correct=ai.get("correct"),
+        possible_issue=ai.get("possible_issue"),
+    )
