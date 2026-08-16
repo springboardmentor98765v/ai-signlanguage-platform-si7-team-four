@@ -35,9 +35,19 @@ class StatusUpdateRequest(BaseModel):
     target_email: str
     is_active: bool
 
+    @field_validator("target_email")
+    @classmethod
+    def _reject_malicious_email(cls, value: str) -> str:
+        return reject_malicious(value)
+
 class RoleUpdateRequest(BaseModel):
     target_email: str = Field(..., min_length=1, max_length=180)
     new_role: str = Field(..., max_length=30)
+
+    @field_validator("target_email")
+    @classmethod
+    def _reject_malicious_email(cls, value: str) -> str:
+        return reject_malicious(value)
 
     @field_validator("new_role")
     @classmethod
@@ -117,10 +127,9 @@ def update_user_role(data: RoleUpdateRequest, admin_email: str, db: Session = De
     summary="Delete a User by ID",
     description="Admin-only. Permanently deletes a single user record by UUID.",
 )
-def delete_single_user(user_id: str, admin_email: Optional[str] = None, db: Session = Depends(get_db)):
+def delete_single_user(user_id: str, admin_email: str, db: Session = Depends(get_db)):
     """Milestone 2 & 3: Delete user by ID"""
-    if admin_email:
-        verify_admin(admin_email, db)
+    verify_admin(admin_email, db)
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
@@ -158,12 +167,11 @@ class BulkRoleRequest(BaseModel):
     summary="Bulk Delete Users",
     description="Admin-only. Deletes multiple users by ID array; reports any IDs not found.",
 )
-def bulk_delete_users(data: BulkDeleteRequest, admin_email: Optional[str] = None, db: Session = Depends(get_db)):
+def bulk_delete_users(data: BulkDeleteRequest, admin_email: str, db: Session = Depends(get_db)):
     """
     Milestone 3 Requirement: Bulk delete multiple users by ID array.
     """
-    if admin_email:
-        verify_admin(admin_email, db)
+    verify_admin(admin_email, db)
     
     deleted_count = 0
     not_found = []
@@ -189,12 +197,11 @@ def bulk_delete_users(data: BulkDeleteRequest, admin_email: Optional[str] = None
     summary="Bulk Update User Status",
     description="Admin-only. Sets active/inactive status across multiple users by ID array.",
 )
-def bulk_update_status(data: BulkStatusRequest, admin_email: Optional[str] = None, db: Session = Depends(get_db)):
+def bulk_update_status(data: BulkStatusRequest, admin_email: str, db: Session = Depends(get_db)):
     """
     Milestone 3 Requirement: Bulk update active/inactive status across users.
     """
-    if admin_email:
-        verify_admin(admin_email, db)
+    verify_admin(admin_email, db)
         
     updated_count = 0
     for uid in data.user_ids:
@@ -216,12 +223,11 @@ def bulk_update_status(data: BulkStatusRequest, admin_email: Optional[str] = Non
     summary="Bulk Update User Roles",
     description="Admin-only. Changes roles across multiple users by ID array to an allowed role.",
 )
-def bulk_update_roles(data: BulkRoleRequest, admin_email: Optional[str] = None, db: Session = Depends(get_db)):
+def bulk_update_roles(data: BulkRoleRequest, admin_email: str, db: Session = Depends(get_db)):
     """
     Milestone 3 Requirement: Bulk update user roles across multiple accounts.
     """
-    if admin_email:
-        verify_admin(admin_email, db)
+    verify_admin(admin_email, db)
         
     updated_count = 0
     for uid in data.user_ids:

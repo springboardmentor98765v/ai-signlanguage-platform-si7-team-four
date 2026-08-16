@@ -7,7 +7,7 @@ instructor dashboards (`app/routers/auth.py`). A trainer can only view THEIR
 assigned learners.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
@@ -21,6 +21,7 @@ from app.schemas.trainer import (
     CertificationStatusMetric,
 )
 from app.utils.security import verify_token_and_role
+from app.utils.validation import reject_malicious
 
 router = APIRouter(prefix="/api/trainer", tags=["Accessibility Trainer"])
 
@@ -30,6 +31,13 @@ TRAINER_ROLE = "Accessibility Trainer"
 class AssignLearnerRequest(BaseModel):
     learner_id: str | None = Field(default=None, min_length=1, max_length=80)
     learner_email: str | None = Field(default=None, max_length=180)
+
+    @field_validator("learner_id", "learner_email")
+    @classmethod
+    def _reject_malicious_identifiers(cls, value):
+        if value is None:
+            return value
+        return reject_malicious(value)
 
 
 def _get_assigned_learner(db: Session, trainer_id: str, learner_id: str) -> User:

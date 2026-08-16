@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import jwt
 import os
+import logging
 from dotenv import load_dotenv
 from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -8,8 +9,16 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 # --- LOAD ENVIRONMENT VARIABLES ---
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
 # Securely load configuration from .env matching SECRET_KEY
 JWT_SECRET = os.getenv("SECRET_KEY", os.getenv("JWT_SECRET", "SUPER_SECRET_SIGN_LANGUAGE_KEY_XYZ_123"))
+FALLBACK_JWT_SECRET = "SUPER_SECRET_SIGN_LANGUAGE_KEY_XYZ_123"
+if JWT_SECRET == FALLBACK_JWT_SECRET:
+    logger.warning(
+        "SECRET_KEY is not set in the environment; JWT signing is using the "
+        "hardcoded DEVELOPMENT fallback. Set SECRET_KEY before any deployment."
+    )
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 60))
 

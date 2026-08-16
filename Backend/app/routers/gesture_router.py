@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field, field_validator
 from typing import List
 import shutil
 import os
+import logging
 
 from app.db.database import get_db
 from app.models import models
@@ -14,6 +15,8 @@ router = APIRouter(prefix="/api/v1/day3", tags=["Day 3 Core Features"])
 # Directory to store uploaded sample frames/videos for sign processing simulation
 UPLOAD_DIR = "app/static/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+logger = logging.getLogger(__name__)
 
 class SignSubmission(BaseModel):
     sign_text: str = Field(..., min_length=1, max_length=200)
@@ -61,7 +64,8 @@ async def upload_gesture_frame(file: UploadFile = File(...)):
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
+        logger.warning("Failed to save gesture frame upload: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to save the uploaded frame.")
         
     return {
         "filename": file.filename,

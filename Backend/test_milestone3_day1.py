@@ -118,11 +118,21 @@ def test_milestone3_notification_service():
 
 def test_milestone3_bulk_admin_actions():
     """Test Bulk Admin Actions: Bulk Status, Bulk Role, Bulk Delete."""
+    import uuid as _uuid
+    admin_email = f"m3bulkadmin_{_uuid.uuid4().hex[:8]}@example.com"
+    reg = client.post("/api/auth/register", json={
+        "username": "m3bulkadmin",
+        "email": admin_email,
+        "password": "SecurePassword123!",
+        "role": "Admin",
+    })
+    assert reg.status_code == 201, reg.text
+
     # 1. Bulk Status Update
     status_res = client.patch("/api/admin/users/bulk-status", json={
         "user_ids": ["dummy_u1", "dummy_u2"],
         "is_active": False
-    })
+    }, params={"admin_email": admin_email})
     assert status_res.status_code == 200
     assert "updated_count" in status_res.json()
 
@@ -130,16 +140,23 @@ def test_milestone3_bulk_admin_actions():
     role_res = client.patch("/api/admin/users/bulk-role", json={
         "user_ids": ["dummy_u1", "dummy_u2"],
         "new_role": "Instructor"
-    })
+    }, params={"admin_email": admin_email})
     assert role_res.status_code == 200
     assert "updated_count" in role_res.json()
 
     # 3. Bulk Delete
     del_res = client.post("/api/admin/users/bulk-delete", json={
         "user_ids": ["dummy_u1", "dummy_u2"]
-    })
+    }, params={"admin_email": admin_email})
     assert del_res.status_code == 200
     assert "deleted_count" in del_res.json()
+
+    # 4. Missing admin_email must NOT bypass admin verification.
+    denied = client.patch("/api/admin/users/bulk-status", json={
+        "user_ids": ["dummy_u1"],
+        "is_active": False,
+    })
+    assert denied.status_code == 422
 
 def test_milestone3_csv_bulk_lesson_upload():
     """Test CSV Bulk Lesson Upload feature."""

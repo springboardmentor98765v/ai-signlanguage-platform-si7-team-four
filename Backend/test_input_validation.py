@@ -44,6 +44,12 @@ def _auth_headers(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
+def _login_from_email(email: str) -> str:
+    login = client.post("/api/auth/login", json={"email": email, "password": "SecurePassword123!"})
+    assert login.status_code == 200, login.text
+    return login.json()["access_token"]
+
+
 # ------------------------------------------------------------------------------
 # Auth & Profile
 # ------------------------------------------------------------------------------
@@ -89,6 +95,25 @@ def test_register_rejects_weak_password():
         "password": "abc",
     })
     assert res.status_code == 422
+
+
+def test_register_rejects_duplicate_username():
+    username = f"dupname_{make_uuid()}"
+    email_a = f"dup_a_{make_uuid()}@example.com"
+    email_b = f"dup_b_{make_uuid()}@example.com"
+    first = client.post("/api/auth/register", json={
+        "username": username,
+        "email": email_a,
+        "password": "SecurePassword123!",
+    })
+    assert first.status_code == 201
+    dup = client.post("/api/auth/register", json={
+        "username": username,
+        "email": email_b,
+        "password": "SecurePassword123!",
+    })
+    assert dup.status_code == 400
+    assert "already taken" in dup.json()["detail"].lower()
 
 
 def test_profile_update_rejects_sql_injection_username():
@@ -337,3 +362,215 @@ def test_admin_bulk_upload_rejects_malicious_title_row():
     body = res.json()
     assert body["rows_inserted"] == 0
     assert body["rows_rejected"] == 1
+
+
+def test_admin_single_status_rejects_malicious_target_email():
+    admin_email = _ensure_admin()
+    res = client.patch("/api/admin/user-status", json={
+        "target_email": XSS_PATTERN,
+        "is_active": False,
+    }, params={"admin_email": admin_email})
+    assert res.status_code == 422
+
+
+def test_admin_single_status_rejects_sql_target_email():
+    admin_email = _ensure_admin()
+    res = client.patch("/api/admin/user-status", json={
+        "target_email": SQLI_PATTERN,
+        "is_active": False,
+    }, params={"admin_email": admin_email})
+    assert res.status_code == 422
+
+
+def test_admin_bulk_actions_require_admin_email():
+    res = client.patch("/api/admin/users/bulk-status", json={
+        "user_ids": ["dummy-1"], "is_active": False,
+    })
+    assert res.status_code == 422
+
+    res = client.post("/api/admin/users/bulk-delete", json={
+        "user_ids": ["dummy-1"],
+    })
+    assert res.status_code == 422
+
+    res = client.delete(f"/api/admin/users/{make_uuid()}")
+    assert res.status_code == 422
+
+
+def test_admin_bulk_actions_reject_non_admin_email():
+    _, learner_email = _register_plain("Learner")
+    res = client.patch("/api/admin/users/bulk-status", json={
+        "user_ids": ["dummy-1"], "is_active": False,
+    }, params={"admin_email": learner_email})
+    assert res.status_code == 403
+    assert "detail" in res.json()
+
+
+def test_deactivated_account_cannot_login():
+    admin_email = _ensure_admin()
+    _, victim_email = _register_plain("Learner")
+
+    deactivate = client.patch("/api/admin/user-status", json={
+        "target_email": victim_email,
+        "is_active": False,
+    }, params={"admin_email": admin_email})
+    assert deactivate.status_code == 200
+
+    login = client.post("/api/auth/login", json={
+        "email": victim_email,
+        "password": "SecurePassword123!",
+    })
+    assert login.status_code == 403
+    assert "detail" in login.json()
+
+
+# ------------------------------------------------------------------------------
+# M4 Day 2: Accessibility Trainer (malicious-input rejection + auth posture)
+# ------------------------------------------------------------------------------
+
+TRAINER_ROLE = "Accessibility Trainer"
+
+
+def _register_plain(role: str) -> tuple[str, str]:
+    """Register a fresh user; return (user_id, email)."""
+    email = f"val_{role.lower().replace(' ', '_')}_{make_uuid()}@example.com"
+    reg = client.post("/api/auth/register", json={
+        "username": f"val_{uuid.uuid4().hex[:6]}",
+        "email": email,
+        "password": "SecurePassword123!",
+        "role": role,
+    })
+    assert reg.status_code == 201, reg.text
+    return reg.json()["user_id"], email
+
+
+def _trainer_token() -> str:
+    """Token for a freshly registered Accessibility Trainer."""
+    _, trainer_email = _register_plain(TRAINER_ROLE)
+    return _login_from_email(trainer_email)
+
+
+def _learner_id_and_token() -> tuple[str, str]:
+    """Register a Learner and return (user_id, token)."""
+    user_id, email = _register_plain("Learner")
+    login = client.post("/api/auth/login", json={"email": email, "password": "SecurePassword123!"})
+    assert login.status_code == 200, login.text
+    return user_id, login.json()["access_token"]
+
+
+def test_trainer_assign_rejects_malicious_learner_email():
+    token = _trainer_token()
+    res = client.post(
+        "/api/trainer/assign-learner",
+        json={"learner_email": XSS_PATTERN},
+        headers=_auth_headers(token),
+    )
+    assert res.status_code == 422
+
+
+def test_trainer_assign_rejects_sql_learner_id():
+    token = _trainer_token()
+    res = client.post(
+        "/api/trainer/assign-learner",
+        json={"learner_id": SQLI_PATTERN},
+        headers=_auth_headers(token),
+    )
+    assert res.status_code == 422
+
+
+def test_trainer_assign_requires_an_identifier():
+    token = _trainer_token()
+    res = client.post(
+        "/api/trainer/assign-learner",
+        json={},
+        headers=_auth_headers(token),
+    )
+    assert res.status_code == 400
+    assert "detail" in res.json()
+
+
+def test_trainer_cannot_assign_self():
+    trainer_id, trainer_email = _register_plain(TRAINER_ROLE)
+    token = _login_from_email(trainer_email)
+    res = client.post(
+        "/api/trainer/assign-learner",
+        json={"learner_id": trainer_id},
+        headers=_auth_headers(token),
+    )
+    assert res.status_code == 400
+    assert "detail" in res.json()
+
+
+def test_trainer_cannot_assign_non_learner():
+    token = _trainer_token()
+    instructor_id, _ = _register_plain("Instructor")
+    res = client.post(
+        "/api/trainer/assign-learner",
+        json={"learner_id": instructor_id},
+        headers=_auth_headers(token),
+    )
+    assert res.status_code == 400
+    assert "detail" in res.json()
+
+
+def test_trainer_endpoints_require_token():
+    for path in (
+        "/api/trainer/learners",
+        "/api/trainer/assign-learner",
+        "/api/trainer/learners/aaaaaaaa-bbbb-cccc-dddd-eeeeffff0001/engagement",
+        "/api/trainer/learners/aaaaaaaa-bbbb-cccc-dddd-eeeeffff0001/skill-development",
+        "/api/trainer/learners/aaaaaaaa-bbbb-cccc-dddd-eeeeffff0001/assessment-analytics",
+        "/api/trainer/learners/aaaaaaaa-bbbb-cccc-dddd-eeeeffff0001/certification-status",
+    ):
+        res = client.get(path) if "assign" not in path else None
+        if res is None:
+            res = client.post(path, json={"learner_email": "learner@example.com"})
+        assert res.status_code == 401, f"{path}: {res.status_code}"
+        assert "detail" in res.json()
+
+
+def test_trainer_endpoints_reject_learner_role():
+    _, learner_token = _learner_id_and_token()
+    res = client.get("/api/trainer/learners", headers=_auth_headers(learner_token))
+    assert res.status_code == 403
+    assert "detail" in res.json()
+
+    res = client.post(
+        "/api/trainer/assign-learner",
+        json={"learner_email": "learner@example.com"},
+        headers=_auth_headers(learner_token),
+    )
+    assert res.status_code == 403
+    assert "detail" in res.json()
+
+
+def test_trainer_assign_valid_learner_succeeds():
+    token = _trainer_token()
+    learner_id, _ = _learner_id_and_token()
+    res = client.post(
+        "/api/trainer/assign-learner",
+        json={"learner_id": learner_id},
+        headers=_auth_headers(token),
+    )
+    assert res.status_code == 200
+    assert res.json()["learner_id"] == learner_id
+
+
+# ------------------------------------------------------------------------------
+# M4 Day 4: Instructor-student management hardening
+# ------------------------------------------------------------------------------
+
+def test_instructor_assign_rejects_malicious_student_email():
+    res = client.post("/api/instructor/assign-student", json={
+        "instructor_email": "instructor@example.com",
+        "student_email": XSS_PATTERN,
+    })
+    assert res.status_code == 422
+
+
+def test_instructor_assign_rejects_sql_instructor_email():
+    res = client.post("/api/instructor/assign-student", json={
+        "instructor_email": SQLI_PATTERN,
+        "student_email": "student@example.com",
+    })
+    assert res.status_code == 422

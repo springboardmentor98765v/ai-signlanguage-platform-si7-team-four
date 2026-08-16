@@ -65,9 +65,13 @@ class Lesson(Base):
 
 class PracticeSession(Base):
     __tablename__ = "practice_sessions"
-    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
-    user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
-    lesson_id = Column(UUID(as_uuid=False), ForeignKey("lessons.id"), nullable=False)
+    # id/user_id/lesson_id are String(36) (not UUID(as_uuid=False)) because the app
+    # runs on SQLite, whose NUMERIC column affinity converts digit-only UUID strings
+    # (e.g. "11111111-1111-1111-1111-111111111111") into floats, corrupting reads.
+    # Same approach as the notifications table. See _as_uuid() in practice_service.
+    id = Column(String(36), primary_key=True, default=new_id)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    lesson_id = Column(String(36), ForeignKey("lessons.id"), nullable=False, index=True)
     status = Column(String(20), default="initialized")
     attempt_count = Column(Integer, default=0)
     duration_seconds = Column(Float, nullable=True)
@@ -81,8 +85,8 @@ class PracticeSession(Base):
 
 class Assessment(Base):
     __tablename__ = "assessments"
-    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
-    session_id = Column(UUID(as_uuid=False), ForeignKey("practice_sessions.id"), nullable=False)
+    id = Column(String(36), primary_key=True, default=new_id)
+    session_id = Column(String(36), ForeignKey("practice_sessions.id"), nullable=False, index=True)
     predicted_sign = Column(String(5))
     expected_sign = Column(String(5), nullable=False)
     confidence = Column(Float)
@@ -154,8 +158,8 @@ class TrainerLearnerLink(Base):
     __tablename__ = "trainer_learner_links"
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
-    trainer_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
-    learner_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    trainer_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False, index=True)
+    learner_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False, index=True)
 
     assigned_at = Column(DateTime, default=datetime.utcnow)
 

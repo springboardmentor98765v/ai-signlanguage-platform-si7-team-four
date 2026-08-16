@@ -23,6 +23,9 @@ from app.utils.ratelimit import (
 import bcrypt
 import uuid
 import jwt 
+import logging
+
+logger = logging.getLogger(__name__) 
 
 # --- LOAD ENVIRONMENT VARIABLES ---
 load_dotenv()
@@ -68,6 +71,14 @@ def register_user(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User account already exists with this email."
+        )
+
+    # Usernames are unique too - flag duplicates before the DB raises IntegrityError.
+    existing_username = db.query(User).filter(User.username == user_data.username).first()
+    if existing_username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username is already taken."
         )
     
     # 2. Hash the user password safely
@@ -156,7 +167,15 @@ def login_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password provided."
         )
-    
+
+    # Enforce the admin is_active flag: deactivated accounts cannot authenticate.
+    db_account = db.query(User).filter(User.email == login_data.email).first()
+    if db_account is not None and not db_account.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account has been deactivated. Contact an administrator."
+        )
+
     # --- Generate token payload containing user identity & role ---
     token_payload = {
         "user_id": user_record["user_id"],
@@ -285,7 +304,8 @@ def refresh_session(body: RefreshRequest):
             detail="Invalid or malformed refresh token provided."
         )
     except Exception as e:
+        logger.warning("Refresh-token authentication failed: %s", e)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Authentication failed: {str(e)}"
+            detail="Authentication failed. Please log in again."
         )

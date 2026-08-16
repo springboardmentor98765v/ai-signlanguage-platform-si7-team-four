@@ -536,6 +536,31 @@ def test_practice_submit_invalid_image():
     assert "detail" in bad.json()
 
 
+def test_practice_numeric_looking_lesson_id_is_stable():
+    """Digit-only UUID strings must not crash the practice tables on SQLite.
+
+    Regression: a valid UUID made of only digits (e.g. 11111111-...-1111) was
+    stored as a FLOAT by SQLite's NUMERIC column affinity, so reading the row
+    back crashed with `AttributeError: 'float' object has no attribute 'replace'`.
+    The tables now store ids as String(36) (same pattern as notifications).
+    """
+    user_id, _ = _register("Learner")
+    numeric_uuid = "11111111-1111-1111-1111-111111111111"
+
+    started = client.post(
+        "/api/practice/start",
+        params={"user_id": user_id, "lesson_id": numeric_uuid},
+    )
+    assert started.status_code == 200, started.text
+    session_id = started.json()["session_id"]
+    assert started.json()["lesson_id"] == numeric_uuid
+
+    # Reading the row back (start and end both SELECT it) must not crash.
+    ended = client.post("/api/practice/end", params={"session_id": session_id})
+    assert ended.status_code == 200, ended.text
+    assert ended.json()["status"] == "completed"
+
+
 # ==============================================================================
 # Accessibility Trainer (role-gated endpoints)
 # ==============================================================================

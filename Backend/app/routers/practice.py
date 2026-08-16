@@ -11,6 +11,9 @@ from app.schemas.practice import (
     PracticeImageSubmissionRequest,
 )
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/practice", tags=["Practice Service"])
 
@@ -130,9 +133,10 @@ def submit_practice_frame(
     try:
         ai_resp = httpx.post(f"{ai_url}/predict", files=files, data=data, timeout=10.0)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"AI service request failed: {exc}")
+        logger.warning("AI service request failed: %s", exc)
+        raise HTTPException(status_code=502, detail="AI service is unreachable. Please try again shortly.")
     if ai_resp.status_code != 200:
-        raise HTTPException(status_code=502, detail="AI service returned error response")
+        raise HTTPException(status_code=502, detail="AI service returned an unexpected error.")
 
     ai = ai_resp.json()
     return PracticeSubmitResponse(
