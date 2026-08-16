@@ -1,0 +1,39 @@
+# Build context slim-down + secrets hygiene for the Docker builds
+# (both Dockerfile.backend and Dockerfile.ai use the repo root as context).
+
+# VCS / CI
+.git
+.gitignore
+.github
+
+# Secrets & env files (never bake a real .env into an image)
+**/.env
+**/.env.*
+!.env.example
+!.env.production.example
+
+# Python
+**/__pycache__
+**/*.pyc
+**/*.pyo
+.venv
+venv
+env
+**/*.egg-info
+
+# Dev data & logs (not part of the image)
+**/app_data.db
+**/app_data.db.*
+**/backend.log
+**/frontend.log
+run_logs
+logs
+
+# Frontend / node
+node_modules
+dist
+Frontend
+
+# Local tools
+*.local
+.DS_Store

@@ -33,9 +33,17 @@ services:
     restart: unless-stopped
     # NOTE: DATABASE_URL is intentionally NOT pulled from the repo-root .env
     # (which points at localhost for non-Docker runs). Inside the container the
-    # backend must reach the `postgres` service over the compose network.
+    # backend must reach the `postgres` service over the compose network, so the
+    # DB persists via the named `signlang_pgdata` volume below.
     environment:
       DATABASE_URL: postgresql+psycopg2://signlang:signlang_dev_pw@postgres:5432/signlang_db
+      # Secret from the repo-root .env (or shell) for docker compose runs;
+      # real deployments must set SECRET_KEY to a long random value.
+      SECRET_KEY: ${SECRET_KEY:-signlang_compose_dev_secret_change_me}
+      JWT_SECRET: ${JWT_SECRET:-}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
+      AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai-service:8001}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-4}
       EMAIL_HOST: ${EMAIL_HOST:-smtp.gmail.com}
       EMAIL_APP_PASSWORD: ${EMAIL_APP_PASSWORD:-}
       PDF_OUTPUT_DIR: ${PDF_OUTPUT_DIR:-/app/certificates}

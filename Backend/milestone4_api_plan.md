@@ -188,3 +188,43 @@ widened to `String(30)` (21-char role); test suite covers register + RBAC 401/40
 - [x] "Get my assigned learners" API working for the Trainer role
 - [x] Engagement / skill / analytics / certification-status APIs working
 - [x] Access correctly restricted to the Accessibility Trainer role only (401/403 verified)
+
+---
+
+## 8. Deployment & Database Decision (Day 5)
+
+**Decision: keep the two-tier DB approach — no forced migration.**
+
+- **Local (non-Docker) development** keeps the file-based SQLite default
+  (`Backend/app/db/database.py`, `app_data.db`). This is what the pytest suite
+  targets and is the fastest dev loop.
+- **Containerised / production** (`Dockerfile.backend` + `docker-compose.yml`)
+  already uses the `Database_Devops/app/db/database.py` layer, which reads
+  `DATABASE_URL` (defaulting to the compose `postgres` service). The PostgreSQL
+  data persists across restarts via the named `signlang_pgdata` volume, so
+  **no data is lost on container restart** — the SQLite-persistence concern
+  does not apply to the compose stack.
+- **Hosted free-tier DB (Supabase / Neon) is NOT wired up in this repo.** If a
+  later milestone wants it, the app needs no code change: set `DATABASE_URL`
+  in `.env.production` to the hosted postgres URL and the container's db layer
+  connects automatically. This requires the operators to:
+  1. provision the hosted Postgres instance,
+  2. run schema creation (`Base.metadata.create_all` runs on startup),
+  3. seed data via `Backend/seed_data.py`.
+- Production env template lives at `Backend/.env.production.example`
+  (placeholders only; real `.env.production` is git-ignored).
+
+### Container changes (Day 5)
+
+- `Dockerfile.backend`: base image pinned to `python:3.11.9-slim`; deps from
+  `Backend/requirements.txt` (already includes slowapi + sqlalchemy + reportlab
+  added in M3/M4) + `Database_Devops/requirements.txt` (psycopg2-binary).
+  uvicorn runs **without `--reload`**, on `0.0.0.0:$PORT` with
+  `$WEB_CONCURRENCY` workers and `--proxy-headers`.
+- `docker-compose.yml`: backend now receives `SECRET_KEY`/`JWT_SECRET`,
+  `ALLOWED_ORIGINS`, `AI_SERVICE_URL`, `WEB_CONCURRENCY` env; Postgres data
+  persists on the `signlang_pgdata` volume.
+- `Backend/app/main.py`: CORS origins read from `ALLOWED_ORIGINS`
+  (comma-separated; default `*`).
+- `.dockerignore`: excludes `.env*`, `app_data.db*`, pycache, logs from the
+  build context so secrets and dev data never enter the image.

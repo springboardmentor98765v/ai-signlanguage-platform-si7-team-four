@@ -1,17 +1,44 @@
-FROM python:3.11-slim
+# Backend image for the AI Sign Language Platform.
+#
+# Pinned to a specific Python patch release (3.11.9) so rebuilds are stable.
+# For fully reproducible builds, additionally pin the base image by digest
+# (e.g. python:3.11.9-slim-bookworm@sha256:...) and pin the pip packages in
+# Backend/requirements.txt to exact versions.
+#
+# The image assembles the app from three source trees that the milestones
+# split the backend into:
+#   Backend/app            - main.py, models, schemas, utils, most routers
+#   BD_Logic/app/routers   - business-logic routers (same-named files win)
+#   BD_Logic/app/services  - business-logic services
+#   Database_Devops/app/db - db layer that reads DATABASE_URL (PostgreSQL)
+FROM python:3.11.9-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PORT=8000 \
+    WEB_CONCURRENCY=4
 
 WORKDIR /code
 
+# Backend runtime + DB drivers. req-backend.txt pins PyJWT; the rest are
+# unpinned so pip resolves compatible latest. slowapi, sqlalchemy and
+# reportlab (added in M3/M4) are all already listed there.
 COPY Backend/requirements.txt ./req-backend.txt
 COPY Database_Devops/requirements.txt ./req-db.txt
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r req-backend.txt -r req-db.txt
 
+# Business logic routers/services and the DB layer are layered on top of
+# Backend/app so app.main:app can import the full merged router set.
 COPY Backend/app ./app
 COPY BD_Logic/app/routers ./app/routers
 COPY BD_Logic/app/services ./app/services
 COPY Database_Devops/app/db ./app/db
 
-EXPOSE 8000
+EXPOSE $PORT
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Production uvicorn: no --reload, bound to all interfaces so the container
+# can be reached via the compose network / a reverse proxy. Multi-worker via
+# $WEB_CONCURRENCY, and --proxy-headers so X-Forwarded-* from a proxy are
+# honoured. Override PORT / WEB_CONCURRENCY with -e at runtime if needed.
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --workers ${WEB_CONCURRENCY} --proxy-headers"]

@@ -104,9 +104,16 @@ async def add_security_headers(request: Request, call_next):
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
+# CORS origins are configurable via ALLOWED_ORIGINS (comma-separated).
+# Defaults to "*" for local development; a deployment should set the real
+# frontend origin(s) in .env.production. Never combine "*" with credentials
+# on a public deployment.
+ALLOWED_ORIGINS_CFG = os.getenv("ALLOWED_ORIGINS", "*")
+_CORS_ORIGINS = [o.strip() for o in ALLOWED_ORIGINS_CFG.split(",") if o.strip()] or ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
