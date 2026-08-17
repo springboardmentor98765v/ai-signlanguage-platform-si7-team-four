@@ -1,8 +1,8 @@
 // Centralized API Service for AI Sign Language Platform
-// Connects to Intern 2's FastAPI Backend (default http://localhost:8000)
-// Includes automatic graceful fallback to mock data if the backend is offline.
+// Connects to FastAPI Backend via dynamic URL configuration
+// Includes automatic graceful fallback to offline simulation data when backend is offline.
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const getAuthHeaders = () => {
   const token = localStorage.getItem('access_token');
@@ -42,6 +42,73 @@ async function fetchWithFallback(url, options = {}, fallbackData = null) {
   }
 }
 
+/**
+ * Generic API fetcher for live backend endpoints
+ */
+export async function apiRequest(endpoint, options = {}) {
+  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      ...getAuthHeaders(),
+      ...(options.headers || {}),
+    },
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    let errorJson = {};
+    try { errorJson = JSON.parse(errorText); } catch (_) {}
+    throw new Error(errorJson.message || errorJson.detail || `Server returned status ${res.status}`);
+  }
+
+  return await res.json();
+}
+
+/**
+ * Binary Stream File Downloader (PDF & Excel Exports)
+ */
+export async function downloadFileStream(endpoint, defaultFilename) {
+  const token = localStorage.getItem('access_token');
+  const fullUrl = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
+
+  try {
+    const response = await fetch(fullUrl, {
+      method: 'GET',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`File stream failed with HTTP status ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = downloadUrl;
+    anchor.setAttribute('download', defaultFilename);
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.URL.revokeObjectURL(downloadUrl);
+    return true;
+  } catch (err) {
+    console.warn(`[Download Fallback] Streaming from ${fullUrl} failed (${err.message}). Simulating offline download trigger.`);
+    const dummyBlob = new Blob([`Sign Language Platform Mock Export - ${defaultFilename}`], { type: 'text/plain' });
+    const dummyUrl = window.URL.createObjectURL(dummyBlob);
+    const anchor = document.createElement('a');
+    anchor.href = dummyUrl;
+    anchor.setAttribute('download', defaultFilename);
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.URL.revokeObjectURL(dummyUrl);
+    return false;
+  }
+}
+
 // -------------------------------------------------------------------
 // 1) Authentication & User APIs (Intern 2 Contract)
 // -------------------------------------------------------------------
@@ -75,7 +142,13 @@ export async function loginUser({ email, password }) {
         user_id: `usr_${Date.now()}`,
         username: email.split('@')[0] || 'learner_user',
         email: email,
-        role: email.includes('admin') ? 'Administrator' : email.includes('instructor') ? 'Instructor' : 'Learner',
+        role: email.includes('admin')
+          ? 'Administrator'
+          : email.includes('trainer')
+          ? 'Accessibility Trainer'
+          : email.includes('instructor')
+          ? 'Instructor'
+          : 'Learner',
       },
     }
   );
@@ -204,8 +277,33 @@ export async function getCourseDetails(courseId) {
 }
 
 // -------------------------------------------------------------------
-// 3) Practice Service Endpoints (Intern 2 Contract)
+// 3) Practice & Gesture Submissions
 // -------------------------------------------------------------------
+
+export async function submitPracticeGesture({ userId, lessonId, targetLetter, imageData }) {
+  return await fetchWithFallback(
+    `${API_BASE_URL}/api/practice/submit`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        user_id: userId || 1,
+        lesson_id: lessonId || 1,
+        target_letter: targetLetter,
+        image_data: imageData,
+      }),
+    },
+    {
+      predicted_sign: targetLetter,
+      confidence: 92,
+      feedback: `Great job! Hand posture matches target sign '${targetLetter}' accurately.`,
+      metrics: {
+        hand_shape: 94,
+        finger_position: 88,
+        timing: 91,
+      },
+    }
+  );
+}
 
 export async function startPracticeSession(lessonId) {
   return await fetchWithFallback(
@@ -241,7 +339,7 @@ export async function processWebcamFrame(sessionId, base64FrameData) {
 }
 
 // -------------------------------------------------------------------
-// 4) Assessment & Feedback Service Endpoints (Intern 2 Contract)
+// 4) Assessment & Feedback Service Endpoints
 // -------------------------------------------------------------------
 
 export async function evaluateAssessment({ sessionId, expectedGesture, predictedGesture, confidence }) {
@@ -284,7 +382,7 @@ export async function evaluateAssessment({ sessionId, expectedGesture, predicted
 }
 
 // -------------------------------------------------------------------
-// 5) Analytics & Dashboard Endpoints (Intern 2 Contract)
+// 5) Analytics & Dashboard Endpoints
 // -------------------------------------------------------------------
 
 export async function getDashboardAnalytics() {
@@ -297,7 +395,7 @@ export async function getDashboardAnalytics() {
       lessons_completed: 18,
       practice_hours: 24.5,
       improvement_rate_percentage: 12.0,
-      streak_days: 5,
+      streak_days: 7,
       accuracy_over_time: [
         { date: 'Mon', accuracy: 68 },
         { date: 'Tue', accuracy: 75 },
@@ -345,7 +443,57 @@ export async function getRecommendations() {
 }
 
 // -------------------------------------------------------------------
-// 6) Admin & Instructor APIs
+// 6) Accessibility Trainer APIs (Day 2 & Day 3)
+// -------------------------------------------------------------------
+
+export async function getAccessibilityTrainerAnalytics() {
+  return await fetchWithFallback(
+    `${API_BASE_URL}/api/trainer/analytics`,
+    { method: 'GET' },
+    {
+      assigned_learners: 28,
+      active_this_week: 22,
+      avg_accuracy: 86.4,
+      certifications_issued: 15,
+      learners: [
+        { id: 1, name: 'Aarav Patel', level: 'Intermediate', progress: 82, accuracy: 89, status: 'Certified' },
+        { id: 2, name: 'Ananya Sharma', level: 'Beginner', progress: 45, accuracy: 74, status: 'In Assessment' },
+        { id: 3, name: 'Rohan Gupta', level: 'Advanced', progress: 95, accuracy: 96, status: 'Certified' },
+        { id: 4, name: 'Meera Nair', level: 'Beginner', progress: 30, accuracy: 62, status: 'Needs Support' },
+        { id: 5, name: 'Vikram Joshi', level: 'Intermediate', progress: 68, accuracy: 81, status: 'In Assessment' },
+      ],
+      skill_breakdown: [
+        { skill: 'Alphabet Finger-Spelling (A-Z)', score: 91 },
+        { skill: 'Numeric Gestures (1-10)', score: 87 },
+        { skill: 'Dynamic Gesture Signs (J, Z)', score: 72 },
+        { skill: 'Hand-Shape Framing & Stability', score: 84 },
+        { skill: 'Thumb & Palm Alignment', score: 78 },
+      ],
+    }
+  );
+}
+
+// -------------------------------------------------------------------
+// 7) Certification & Reports Export APIs (Day 3)
+// -------------------------------------------------------------------
+
+export async function downloadCertificatePDF(examId = 1) {
+  return await downloadFileStream(
+    `/api/certificates/download/${examId}`,
+    `Sign_Language_Certificate_${examId}.pdf`
+  );
+}
+
+export async function exportReportFile(reportType, format = 'pdf') {
+  const extension = format === 'pdf' ? 'pdf' : 'xlsx';
+  return await downloadFileStream(
+    `/api/reports/export?type=${reportType}&format=${format}`,
+    `${reportType}_report.${extension}`
+  );
+}
+
+// -------------------------------------------------------------------
+// 8) Admin & Instructor APIs
 // -------------------------------------------------------------------
 
 export async function getAllUsers() {
@@ -353,7 +501,7 @@ export async function getAllUsers() {
     `${API_BASE_URL}/api/admin/users`,
     { method: 'GET' },
     [
-      { id: 'usr_1', name: 'Srilalitha Dev', email: 'srilalitha@example.com', role: 'Learner', active: true, accuracy: 91 },
+      { id: 'usr_1', name: 'Parvathy K Manoj', email: 'parvathy@example.com', role: 'Learner', active: true, accuracy: 94 },
       { id: 'usr_2', name: 'Alex Johnson', email: 'alex@example.com', role: 'Learner', active: true, accuracy: 88 },
       { id: 'usr_3', name: 'Dr. Sarah Connor', email: 'sarah.instructor@example.com', role: 'Instructor', active: true, accuracy: 98 },
       { id: 'usr_4', name: 'Charlie Brown', email: 'charlie@example.com', role: 'Learner', active: false, accuracy: 72 },

@@ -1,27 +1,62 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { getAccessibilityTrainerAnalytics } from '../services/api';
 
 export default function AccessibilityTrainerDashboard() {
-  // Mock Data for Day 2 (will connect to real APIs on Day 3)
-  const [trainerData] = useState({
-    assignedLearners: 28,
-    activeThisWeek: 22,
-    avgAccuracy: 86.4,
-    certificationsIssued: 15,
-    learners: [
-      { id: 1, name: 'Aarav Patel', level: 'Intermediate', progress: 82, accuracy: 89, status: 'Certified' },
-      { id: 2, name: 'Ananya Sharma', level: 'Beginner', progress: 45, accuracy: 74, status: 'In Assessment' },
-      { id: 3, name: 'Rohan Gupta', level: 'Advanced', progress: 95, accuracy: 96, status: 'Certified' },
-      { id: 4, name: 'Meera Nair', level: 'Beginner', progress: 30, accuracy: 62, status: 'Needs Support' },
-      { id: 5, name: 'Vikram Joshi', level: 'Intermediate', progress: 68, accuracy: 81, status: 'In Assessment' },
-    ],
-    skillBreakdown: [
-      { skill: 'Alphabet Finger-Spelling (A-Z)', score: 91 },
-      { skill: 'Numeric Gestures (1-10)', score: 87 },
-      { skill: 'Dynamic Gesture Signs (J, Z)', score: 72 },
-      { skill: 'Hand-Shape Framing & Stability', score: 84 },
-      { skill: 'Thumb & Palm Alignment', score: 78 },
-    ],
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [trainerData, setTrainerData] = useState({
+    assignedLearners: 0,
+    activeThisWeek: 0,
+    avgAccuracy: 0,
+    certificationsIssued: 0,
+    learners: [],
+    skillBreakdown: [],
   });
+
+  useEffect(() => {
+    async function loadData() {
+      setLoading(true);
+      setErrorMsg('');
+      try {
+        const data = await getAccessibilityTrainerAnalytics();
+        setTrainerData({
+          assignedLearners: data.assigned_learners ?? data.assignedLearners ?? 0,
+          activeThisWeek: data.active_this_week ?? data.activeThisWeek ?? 0,
+          avgAccuracy: data.avg_accuracy ?? data.avgAccuracy ?? 0,
+          certificationsIssued: data.certifications_issued ?? data.certificationsIssued ?? 0,
+          learners: data.learners || [],
+          skillBreakdown: data.skill_breakdown || data.skillBreakdown || [],
+        });
+      } catch (err) {
+        console.warn('Could not fetch live analytics, using local safe cache:', err);
+        setTrainerData({
+          assignedLearners: 28,
+          activeThisWeek: 22,
+          avgAccuracy: 86.4,
+          certificationsIssued: 15,
+          learners: [
+            { id: 1, name: 'Aarav Patel', level: 'Intermediate', progress: 82, accuracy: 89, status: 'Certified' },
+            { id: 2, name: 'Ananya Sharma', level: 'Beginner', progress: 45, accuracy: 74, status: 'In Assessment' },
+            { id: 3, name: 'Rohan Gupta', level: 'Advanced', progress: 95, accuracy: 96, status: 'Certified' },
+            { id: 4, name: 'Meera Nair', level: 'Beginner', progress: 30, accuracy: 62, status: 'Needs Support' },
+            { id: 5, name: 'Vikram Joshi', level: 'Intermediate', progress: 68, accuracy: 81, status: 'In Assessment' },
+          ],
+          skillBreakdown: [
+            { skill: 'Alphabet Finger-Spelling (A-Z)', score: 91 },
+            { skill: 'Numeric Gestures (1-10)', score: 87 },
+            { skill: 'Dynamic Gesture Signs (J, Z)', score: 72 },
+            { skill: 'Hand-Shape Framing & Stability', score: 84 },
+            { skill: 'Thumb & Palm Alignment', score: 78 },
+          ],
+        });
+        setErrorMsg('Operating with local fallback cache until Backend endpoint is live.');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadData();
+  }, []);
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '1rem 0' }}>
@@ -29,6 +64,11 @@ export default function AccessibilityTrainerDashboard() {
       <div className="page-header" style={{ marginBottom: '1.5rem' }}>
         <p className="page-subtitle">Accessibility Track Analytics & Mentorship</p>
         <h1 className="page-title">Accessibility Trainer Dashboard</h1>
+        {errorMsg && (
+          <span className="badge badge-secondary" style={{ marginTop: '0.5rem', display: 'inline-block' }}>
+            ℹ️ {errorMsg}
+          </span>
+        )}
       </div>
 
       {/* 4 Summary Stat Cards */}
@@ -38,7 +78,7 @@ export default function AccessibilityTrainerDashboard() {
             Assigned Learners
           </span>
           <h2 style={{ fontSize: '2.25rem', fontWeight: 800, color: 'var(--primary)', margin: '0.25rem 0' }}>
-            {trainerData.assignedLearners}
+            {loading ? '...' : trainerData.assignedLearners}
           </h2>
           <small style={{ color: 'var(--text-muted)' }}>Assigned to your cohort</small>
         </div>
@@ -48,9 +88,9 @@ export default function AccessibilityTrainerDashboard() {
             Active This Week
           </span>
           <h2 style={{ fontSize: '2.25rem', fontWeight: 800, color: 'var(--success, #10b981)', margin: '0.25rem 0' }}>
-            {trainerData.activeThisWeek}
+            {loading ? '...' : trainerData.activeThisWeek}
           </h2>
-          <small style={{ color: 'var(--text-muted)' }}>78.5% engagement rate</small>
+          <small style={{ color: 'var(--text-muted)' }}>Engagement rate</small>
         </div>
 
         <div className="card" style={{ padding: '1.25rem' }}>
@@ -58,7 +98,7 @@ export default function AccessibilityTrainerDashboard() {
             Avg Posture Accuracy
           </span>
           <h2 style={{ fontSize: '2.25rem', fontWeight: 800, color: 'var(--warning, #f59e0b)', margin: '0.25rem 0' }}>
-            {trainerData.avgAccuracy}%
+            {loading ? '...' : `${trainerData.avgAccuracy}%`}
           </h2>
           <small style={{ color: 'var(--text-muted)' }}>Across all gesture tests</small>
         </div>
@@ -68,19 +108,19 @@ export default function AccessibilityTrainerDashboard() {
             Certifications Issued
           </span>
           <h2 style={{ fontSize: '2.25rem', fontWeight: 800, color: '#a855f7', margin: '0.25rem 0' }}>
-            {trainerData.certificationsIssued}
+            {loading ? '...' : trainerData.certificationsIssued}
           </h2>
-          <small style={{ color: 'var(--text-muted)' }}>Verified through exam levels</small>
+          <small style={{ color: 'var(--text-muted)' }}>Verified through exams</small>
         </div>
       </div>
 
-      {/* Main Grid: Learner Roster & Skill Breakdown */}
+      {/* Main Grid: Learner Monitoring Table & Skill Development Breakdown */}
       <div className="grid-2" style={{ gap: '1.5rem', marginBottom: '1.5rem' }}>
         {/* Left: Learner Monitoring Table */}
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Learner Progress & Certification</h3>
-            <span className="badge badge-primary">5 Active Learners</span>
+            <span className="badge badge-primary">{trainerData.learners.length} Active Learners</span>
           </div>
 
           <div style={{ overflowX: 'auto' }}>
