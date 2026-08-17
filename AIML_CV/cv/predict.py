@@ -1,5 +1,10 @@
 import os
 import joblib
+import sys
+
+ML_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "ml"))
+if ML_DIR not in sys.path:
+    sys.path.insert(0, ML_DIR)
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "ml", "sign_model.joblib")
 
@@ -9,6 +14,10 @@ _label_encoder = _saved["label_encoder"]
 # new labels 
 _centroids = _saved.get("interpretable_centroids")
 _interp_names = _saved.get("interpretable_feature_names")
+
+_hint_scaler = _saved.get("hint_scaler")
+if _hint_scaler is None:
+    _hint_scaler = _pipeline.named_steps["scale"]
 
 #Deviation threshold to manage the noisy large standard deviation posing as jitters
 DEVIATION_THRESHOLD = 1.0 
@@ -31,12 +40,6 @@ FEATURE_HINTS = {
 }
 
 def predict(hand, extractor):
-    """
-    hand: raw MediaPipe hand landmarks (21 points) for one detected hand
-    extractor: a FeatureExtractor instance
-
-    Returns (predicted_sign: str, confidence: float)
-    """
     features = extractor.extract(hand)
 
     predicted_encoded = _pipeline.predict([features])[0]
@@ -49,20 +52,11 @@ def predict(hand, extractor):
 
 # Function to identify the issue
 def get_possible_issue(hand, extractor, target_label):
-    """
-    Compares the current hand against the typical pose for target_label
-    and names the single feature that's most off, in plain language.
-
-    Returns None if the model has no centroid data (old model file), if
-    target_label wasn't a trained class, or if nothing is meaningfully
-    off (deviation below DEVIATION_THRESHOLD).
-    """
     if not _centroids or target_label not in _centroids:
         return None
 
     features = extractor.extract(hand)
-    scaler = _pipeline.named_steps["scale"]
-    scaled = scaler.transform([features])[0]
+    scaled = _hint_scaler.transform([features])[0]
 
     feature_names = extractor.get_feature_names()
     name_to_idx = {name: i for i, name in enumerate(feature_names)}
@@ -85,14 +79,6 @@ def get_possible_issue(hand, extractor, target_label):
 # Function to feed Intern 4's Feedback Engine
 
 def predict_with_feedback(hand, extractor, target_label=None):
-    """
-    Practice-mode version of predict(): also reports whether the hand
-    matched the letter the person was asked to make, and if not, a hint
-    about what to fix. This is what feeds Intern 4's Feedback Engine.
-
-    Returns (predicted_sign, confidence, correct, possible_issue)
-    correct is None when no target_label is given (open prediction mode).
-    """
     predicted_sign, confidence = predict(hand, extractor)
 
     if target_label is None:

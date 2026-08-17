@@ -1,14 +1,32 @@
 
 from datetime import datetime
+import uuid as uuid_lib
 
 from sqlalchemy.orm import Session
 
 from app.models.models import PracticeSession
 
+
+def _as_uuid(value):
+    """Coerce a value into a canonical hyphenated UUID string.
+
+    Guards against numeric-looking ids (e.g. the frontend sending lesson_id=1).
+    SQLite's NUMERIC column affinity stores such values as INTEGER, which then
+    breaks the UUID result processor on read (uuid.UUID(int) fails). Mapping
+    them to a deterministic UUID keeps every UUID column stored as TEXT.
+    """
+    if value is None:
+        return None
+    try:
+        return str(uuid_lib.UUID(str(value)))
+    except (ValueError, AttributeError, TypeError):
+        return str(uuid_lib.uuid5(uuid_lib.NAMESPACE_DNS, str(value)))
+
+
 def start_session(db: Session, user_id: str, lesson_id: str) -> dict:
     session = PracticeSession(
-        user_id=user_id,
-        lesson_id=lesson_id,
+        user_id=_as_uuid(user_id),
+        lesson_id=_as_uuid(lesson_id),
         status="in_progress",
         attempt_count=0,
         started_at=datetime.utcnow(),
@@ -104,31 +122,4 @@ def get_session(db: Session, session_id: str) -> dict | None:
         "end_time": session.ended_at,
         "duration_seconds": session.duration_seconds,
     }
-
-from sqlalchemy.orm import Session
-from app.models.models import PracticeSession, Lesson  # Adjust import paths if needed
-
-class PracticeService:
-    @staticmethod
-    def get_user_sessions(db: Session, user_id: int):
-        """Retrieves all practice sessions for a specific user from the DB."""
-        return db.query(PracticeSession).filter(PracticeSession.user_id == user_id).all()
-
-    @staticmethod
-    def create_session(db: Session, user_id: int, lesson_id: int, score: float):
-        """Saves a new practice session run directly to the PostgreSQL database."""
-        # Optional: Validate that the lesson exists
-        lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
-        if not lesson:
-            raise ValueError(f"Lesson with ID {lesson_id} does not exist.")
-
-        new_session = PracticeSession(
-            user_id=user_id,
-            lesson_id=lesson_id,
-            score=score
-        )
-        db.add(new_session)
-        db.commit()
-        db.refresh(new_session)
-        return new_session
 

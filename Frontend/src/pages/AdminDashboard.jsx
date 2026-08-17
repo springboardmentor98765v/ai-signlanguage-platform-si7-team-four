@@ -1,72 +1,85 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
 export default function AdminDashboard() {
-  const [users, setUsers] = useState([]);
+  const [users, setUsers] = useState([
+    { id: 1, name: 'Parvathy Manoj', role: 'Learner', status: 'Active' },
+    { id: 2, name: 'Instructor John', role: 'Instructor', status: 'Active' },
+    { id: 3, name: 'Inactive Test User', role: 'Learner', status: 'Inactive' },
+  ]);
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
-
-  const fetchUsers = async () => {
-    try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch('http://localhost:8000/api/admin/users', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await res.json();
-      setUsers(data.users || [
-        { user_id: 'usr_1', username: 'srilalitha_dev', role: 'Learner', is_active: true },
-        { user_id: 'usr_2', username: 'instructor_john', role: 'Instructor', is_active: true }
-      ]);
-    } catch (err) { console.error(err); }
-  };
-
-  const toggleUserStatus = async (userId, currentStatus) => {
-    const token = localStorage.getItem('access_token');
-    await fetch(`http://localhost:8000/api/admin/users/${userId}/status`, {
-      method: 'PATCH',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ is_active: !currentStatus })
-    });
-    setUsers(users.map(u => u.user_id === userId ? { ...u, is_active: !currentStatus } : u));
+  const toggleUserStatus = (id) => {
+    setUsers(users.map(u => u.id === id ? { ...u, status: u.status === 'Active' ? 'Inactive' : 'Active' } : u));
   };
 
   return (
-    <div style={{ padding: '40px', maxWidth: '1000px', margin: '0 auto' }}>
-      <h1 style={{ color: '#0f172a', marginBottom: '8px' }}>Admin Workspace Control ⚙️</h1>
-      <p style={{ color: '#64748b', marginBottom: '24px' }}>Platform user access, roles, and course catalogue overview.</p>
+    <div>
+      <div className="page-header">
+        <p className="page-subtitle">Platform Governance</p>
+        <h1 className="page-title">Admin Dashboard</h1>
+      </div>
 
-      <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-          <thead style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-            <tr>
-              <th style={{ padding: '14px' }}>User ID</th>
-              <th style={{ padding: '14px' }}>Username</th>
-              <th style={{ padding: '14px' }}>Role</th>
-              <th style={{ padding: '14px' }}>Status</th>
-              <th style={{ padding: '14px' }}>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map(u => (
-              <tr key={u.user_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                <td style={{ padding: '14px', fontSize: '12px', color: '#64748b' }}>{u.user_id}</td>
-                <td style={{ padding: '14px', fontWeight: '600' }}>{u.username}</td>
-                <td style={{ padding: '14px' }}>{u.role}</td>
-                <td style={{ padding: '14px' }}>
-                  <span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', background: u.is_active ? '#ecfdf5' : '#fef2f2', color: u.is_active ? '#065f46' : '#991b1b' }}>
-                    {u.is_active ? 'Active' : 'Disabled'}
-                  </span>
-                </td>
-                <td style={{ padding: '14px' }}>
-                  <button onClick={() => toggleUserStatus(u.user_id, u.is_active)} style={{ padding: '6px 12px', borderRadius: '4px', border: 'none', cursor: 'pointer', background: u.is_active ? '#ef4444' : '#10b981', color: '#fff' }}>
-                    {u.is_active ? 'Deactivate' : 'Activate'}
-                  </button>
-                </td>
+      {/* User Management Section */}
+      <div style={{ marginBottom: '2rem' }}>
+        <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--text-main)' }}>
+          User Account Management
+        </h3>
+        <div className="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Action</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id}>
+                  <td style={{ fontWeight: 600 }}>{u.name}</td>
+                  <td><span className="badge badge-secondary">{u.role}</span></td>
+                  <td>
+                    <span className={`badge ${u.status === 'Active' ? 'badge-success' : 'badge-warning'}`}>
+                      {u.status}
+                    </span>
+                  </td>
+                  <td>
+                    <button
+                      onClick={() => toggleUserStatus(u.id)}
+                      className={u.status === 'Active' ? 'btn-danger-sm' : 'btn-success-sm'}
+                    >
+                      {u.status === 'Active' ? 'Deactivate' : 'Activate'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* System Lessons Catalogue */}
+      <div>
+        <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--text-main)' }}>
+          System Lessons Catalogue
+        </h3>
+        <div className="grid-3">
+          <div className="card">
+            <span className="badge badge-primary" style={{ marginBottom: '0.5rem' }}>Beginner</span>
+            <h4 style={{ fontSize: '1rem', fontWeight: 700 }}>Alphabet Basics (A-E)</h4>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Active Learners: 42</p>
+          </div>
+          <div className="card">
+            <span className="badge badge-primary" style={{ marginBottom: '0.5rem' }}>Beginner</span>
+            <h4 style={{ fontSize: '1rem', fontWeight: 700 }}>Numbers (1-10)</h4>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Active Learners: 35</p>
+          </div>
+          <div className="card">
+            <span className="badge badge-primary" style={{ marginBottom: '0.5rem' }}>Intermediate</span>
+            <h4 style={{ fontSize: '1rem', fontWeight: 700 }}>Common Phrases</h4>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Active Learners: 18</p>
+          </div>
+        </div>
       </div>
     </div>
   );

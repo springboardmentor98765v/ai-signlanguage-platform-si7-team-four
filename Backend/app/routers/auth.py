@@ -1,13 +1,31 @@
 import os
 from dotenv import load_dotenv
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Request, Response
 from pydantic import BaseModel
-from app.schemas.user import UserRegister, UserLogin
+from app.schemas.user import (
+    UserRegister,
+    UserLogin,
+    RegisterResponse,
+    LoginResponse,
+    RefreshTokenResponse,
+    LearnerDashboardResponse,
+    InstructorDashboardResponse,
+)
 # Import security utilities and shared secrets directly from security.py to avoid key mismatches
 from app.utils.security import create_access_token, create_refresh_token, verify_token_and_role, JWT_SECRET, JWT_ALGORITHM
+from app.utils.ratelimit import (
+    limiter,
+    LOGIN_LIMIT,
+    REGISTER_LIMIT,
+    LOGIN_ERROR_MESSAGE,
+    REGISTER_ERROR_MESSAGE,
+)
 import bcrypt
 import uuid
 import jwt 
+import logging
+
+logger = logging.getLogger(__name__) 
 
 # --- LOAD ENVIRONMENT VARIABLES ---
 load_dotenv()
@@ -27,14 +45,40 @@ router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 # Temporary simulated database storage dictionary (kept for login path compatibility)
 MOCK_USER_DB = {}
 
-@router.post("/register", status_code=status.HTTP_201_CREATED)
-def register_user(user_data: UserRegister, db: Session = Depends(get_db)):
+@router.post(
+    "/register",
+    status_code=status.HTTP_201_CREATED,
+    response_model=RegisterResponse,
+    summary="Register New User",
+    description=(
+        "Create a new user account. Password is bcrypt-hashed before storage. "
+        "Rate limited to 5 requests per minute per email (429 on exceed)."
+    ),
+)
+@limiter.limit(REGISTER_LIMIT, error_message=REGISTER_ERROR_MESSAGE)
+def register_user(
+    request: Request,
+    response: Response,
+    user_data: UserRegister,
+    db: Session = Depends(get_db),
+):
+    """
+    Register a new user. Returns the new user id and role on success.
+    """
     # 1. Check if user already exists in the real database using the imported User model
     existing_user = db.query(User).filter(User.email == user_data.email).first()
     if existing_user or user_data.email in MOCK_USER_DB:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User account already exists with this email."
+        )
+
+    # Usernames are unique too - flag duplicates before the DB raises IntegrityError.
+    existing_username = db.query(User).filter(User.username == user_data.username).first()
+    if existing_username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username is already taken."
         )
     
     # 2. Hash the user password safely
@@ -73,26 +117,43 @@ def register_user(user_data: UserRegister, db: Session = Depends(get_db)):
         "role": user_data.role
     }
 
-@router.post("/login", status_code=status.HTTP_200_OK)
-def login_user(login_data: UserLogin, db: Session = Depends(get_db)):
+@router.post(
+    "/login",
+    status_code=status.HTTP_200_OK,
+    response_model=LoginResponse,
+    summary="Login (Issue Access + Refresh Tokens)",
+    description=(
+        "Validate credentials and return short-lived access and long-lived refresh "
+        "tokens. Rate limited to 5 requests per minute per email (429 on exceed)."
+    ),
+)
+@limiter.limit(LOGIN_LIMIT, error_message=LOGIN_ERROR_MESSAGE)
+def login_user(
+    request: Request,
+    response: Response,
+    login_data: UserLogin,
+    db: Session = Depends(get_db),
+):
     """
     Day 4 Upgraded Deliverable: Validates credentials and returns cryptographic access & refresh tokens.
     """
-    # Fallback to check real database if MOCK_USER_DB was wiped on server restart
-    user_record = MOCK_USER_DB.get(login_data.email)
-    
-    if not user_record:
-        db_user = db.query(User).filter(User.email == login_data.email).first()
-        if db_user:
-            # Re-sync into mock dict dynamically so login succeeds
-            MOCK_USER_DB[db_user.email] = {
-                "user_id": str(db_user.id),
-                "username": db_user.username,
-                "email": db_user.email,
-                "password": db_user.password_hash,
-                "role": db_user.role
-            }
-            user_record = MOCK_USER_DB.get(login_data.email)
+    # The real database is the source of truth: read the user's current row so
+    # admin role/status changes are picked up on the NEXT login (the in-memory
+    # MOCK_USER_DB snapshot can otherwise go stale). MOCK is kept in sync and is
+    # only used as a fallback for accounts that predate the DB-backed users.
+    user_record = None
+    db_user = db.query(User).filter(User.email == login_data.email).first()
+    if db_user is not None:
+        user_record = {
+            "user_id": str(db_user.id),
+            "username": db_user.username,
+            "email": db_user.email,
+            "password": db_user.password_hash,
+            "role": db_user.role
+        }
+        MOCK_USER_DB[login_data.email] = user_record
+    else:
+        user_record = MOCK_USER_DB.get(login_data.email)
 
     if not user_record:
         raise HTTPException(
@@ -108,7 +169,15 @@ def login_user(login_data: UserLogin, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password provided."
         )
-    
+
+    # Enforce the admin is_active flag: deactivated accounts cannot authenticate.
+    db_account = db.query(User).filter(User.email == login_data.email).first()
+    if db_account is not None and not db_account.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account has been deactivated. Contact an administrator."
+        )
+
     # --- Generate token payload containing user identity & role ---
     token_payload = {
         "user_id": user_record["user_id"],
@@ -134,7 +203,16 @@ def login_user(login_data: UserLogin, db: Session = Depends(get_db)):
 
 # --- DAY 4 DELIVERABLE: ROLE-BASED ACCESS CONTROL MIDDLEWARE DECKS ---
 
-@router.get("/dashboard/learner", status_code=status.HTTP_200_OK)
+@router.get(
+    "/dashboard/learner",
+    status_code=status.HTTP_200_OK,
+    response_model=LearnerDashboardResponse,
+    summary="Learner Dashboard (RBAC: Learner/Admin)",
+    description=(
+        "Role-protected dashboard. Requires a valid Bearer access token with a role "
+        "of 'Learner' or 'Admin'. Returns stub metrics for the learner."
+    ),
+)
 def get_learner_dashboard(token_data: dict = Depends(verify_token_and_role(["Learner", "Admin"]))):
     """
     Role-Based Route: Only accessible if your authenticated JWT has a role of 'Learner' or 'Admin'.
@@ -145,7 +223,16 @@ def get_learner_dashboard(token_data: dict = Depends(verify_token_and_role(["Lea
         "lessons_completed_stub": 18
     }
 
-@router.get("/dashboard/instructor", status_code=status.HTTP_200_OK)
+@router.get(
+    "/dashboard/instructor",
+    status_code=status.HTTP_200_OK,
+    response_model=InstructorDashboardResponse,
+    summary="Instructor Dashboard (RBAC: Instructor/Admin)",
+    description=(
+        "Role-protected dashboard. Requires a valid Bearer access token with a role "
+        "of 'Instructor' or 'Admin'. Returns a stub class performance metric."
+    ),
+)
 def get_instructor_dashboard(token_data: dict = Depends(verify_token_and_role(["Instructor", "Admin"]))):
     """
     Role-Based Route: Only accessible if your authenticated JWT has a role of 'Instructor' or 'Admin'.
@@ -161,7 +248,16 @@ def get_instructor_dashboard(token_data: dict = Depends(verify_token_and_role(["
 class RefreshRequest(BaseModel):
     refresh_token: str
 
-@router.post("/refresh-token", status_code=status.HTTP_200_OK)
+@router.post(
+    "/refresh-token",
+    status_code=status.HTTP_200_OK,
+    response_model=RefreshTokenResponse,
+    summary="Refresh Access Token",
+    description=(
+        "Exchange a valid, non-expired refresh token for a fresh short-lived access "
+        "token. Returns 401 if the refresh token is missing, expired, or malformed."
+    ),
+)
 def refresh_session(body: RefreshRequest):
     """
     Day 8 Upgraded Deliverable: Validates the real refresh token and issues a fresh short-lived access token.
@@ -210,7 +306,8 @@ def refresh_session(body: RefreshRequest):
             detail="Invalid or malformed refresh token provided."
         )
     except Exception as e:
+        logger.warning("Refresh-token authentication failed: %s", e)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Authentication failed: {str(e)}"
+            detail="Authentication failed. Please log in again."
         )

@@ -1,65 +1,104 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
 export default function InstructorDashboard() {
-  const [students, setStudents] = useState([]);
-  const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [lessons, setLessons] = useState([
+    { id: 'les_a', title: 'Alphabet Letter A', target: 'A', difficulty: 'Easy' },
+    { id: 'les_b', title: 'Alphabet Letter B', target: 'B', difficulty: 'Easy' },
+    { id: 'les_c', title: 'Alphabet Letter C', target: 'C', difficulty: 'Easy' },
+  ]);
 
-  useEffect(() => {
-    const fetchStudents = async () => {
-      try {
-        const token = localStorage.getItem('access_token');
-        const res = await fetch('http://localhost:8000/api/instructor/students', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const data = await res.json();
-        setStudents(data.students || [
-          { user_id: 'usr_1', username: 'alex_dev', email: 'alex@test.com', accuracy: 88, completed: 12 },
-          { user_id: 'usr_2', username: 'maria_k', email: 'maria@test.com', accuracy: 94, completed: 18 }
-        ]);
-      } catch (err) {
-        console.error(err);
-      } finally { setLoading(false); }
-    };
-    fetchStudents();
-  }, []);
+  const students = [
+    { name: 'Alex Johnson', email: 'alex@example.com', accuracy: '88%', completed: 12 },
+    { name: 'Beatriz Smith', email: 'beatriz@example.com', accuracy: '94%', completed: 15 },
+    { name: 'Charlie Brown', email: 'charlie@example.com', accuracy: '72%', completed: 8 },
+  ];
 
-  const filteredStudents = students.filter(s => s.username.toLowerCase().includes(search.toLowerCase()));
+  const handleRemoveLesson = (id) => {
+    setLessons(lessons.filter(l => l.id !== id));
+  };
+
+  const filteredStudents = students.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
-    <div style={{ padding: '40px', maxWidth: '1000px', margin: '0 auto' }}>
-      <h1 style={{ color: '#0f172a', marginBottom: '8px' }}>Instructor Dashboard 👩‍🏫</h1>
-      <p style={{ color: '#64748b', marginBottom: '24px' }}>Monitor assigned student accuracy performance and completions.</p>
+    <div>
+      <div className="page-header">
+        <p className="page-subtitle">Classroom Operations</p>
+        <h1 className="page-title">Instructor Dashboard</h1>
+      </div>
 
-      <input 
-        type="text" 
-        placeholder="🔍 Search student by name..." 
-        value={search} 
-        onChange={e => setSearch(e.target.value)} 
-        style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '20px', boxSizing: 'border-box' }}
-      />
+      {/* Student Register */}
+      <div style={{ marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)' }}>Student Performance Register</h3>
+          <input
+            type="text"
+            placeholder="Search student..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            style={{ maxWidth: '250px' }}
+          />
+        </div>
 
-      <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-          <thead style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-            <tr>
-              <th style={{ padding: '14px' }}>Student</th>
-              <th style={{ padding: '14px' }}>Email</th>
-              <th style={{ padding: '14px' }}>Accuracy Rate</th>
-              <th style={{ padding: '14px' }}>Completed Lessons</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredStudents.map(s => (
-              <tr key={s.user_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                <td style={{ padding: '14px', fontWeight: '600' }}>{s.username}</td>
-                <td style={{ padding: '14px', color: '#64748b' }}>{s.email}</td>
-                <td style={{ padding: '14px', color: '#2563eb', fontWeight: 'bold' }}>{s.accuracy}%</td>
-                <td style={{ padding: '14px' }}>{s.completed}</td>
+        <div className="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Student Name</th>
+                <th>Email</th>
+                <th>Accuracy</th>
+                <th>Completed</th>
+                <th>Action</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filteredStudents.map((s, idx) => (
+                <tr key={idx}>
+                  <td style={{ fontWeight: 600 }}>{s.name}</td>
+                  <td style={{ color: 'var(--text-muted)' }}>{s.email}</td>
+                  <td style={{ color: 'var(--primary)', fontWeight: 700 }}>{s.accuracy}</td>
+                  <td>{s.completed}</td>
+                  <td>
+                    <button className="btn-secondary" style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem' }}>Details</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Course Management */}
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)' }}>Manage Course Lessons</h3>
+          <button className="btn-primary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.8rem' }}>+ Add New Lesson</button>
+        </div>
+
+        <div className="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Lesson Title</th>
+                <th>Expected Sign</th>
+                <th>Difficulty</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lessons.map((l) => (
+                <tr key={l.id}>
+                  <td style={{ fontWeight: 600 }}>{l.title}</td>
+                  <td><span className="badge badge-primary">{l.target}</span></td>
+                  <td><span className="badge badge-success">{l.difficulty}</span></td>
+                  <td>
+                    <button onClick={() => handleRemoveLesson(l.id)} className="btn-danger-sm">Remove</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

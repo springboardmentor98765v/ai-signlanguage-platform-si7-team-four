@@ -37,6 +37,8 @@ def assess(
     hand_shape_score: float,
     finger_position_score: float,
     timing_score: float,
+    db=None,
+    user_id: str | None = None,
 ) -> dict:
 
     correct = is_match(predicted_sign, expected_sign)
@@ -47,6 +49,23 @@ def assess(
         timing_score,
         confidence,
     )
+
+    # Milestone 3 - Day 3 hook: lesson passed (correct sign) -> badge event.
+    # Actual badge logic is owned by Intern 4's business-logic layer; this is
+    # the integration point they plug into.
+    if correct and db is not None and user_id:
+        from app.services.notification_service import create_notification
+
+        create_notification(
+            db,
+            user_id=user_id,
+            title="Badge Earned",
+            message=(
+                f"Lesson passed! You signed '{expected_sign}' correctly with "
+                f"{overall_accuracy:.1f}% accuracy."
+            ),
+            event_type="badge_earned",
+        )
 
     return {
         "predicted_sign": predicted_sign,

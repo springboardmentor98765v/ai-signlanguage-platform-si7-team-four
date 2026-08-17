@@ -1,16 +1,22 @@
 from typing import List
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.services.recommendation_service import generate_recommendations
+from app.utils.validation import reject_malicious
 
 router = APIRouter(prefix="/recommendation", tags=["Recommendation"])
 
 
 class AttemptRecord(BaseModel):
-    sign: str
+    sign: str = Field(..., min_length=1, max_length=5)
     score: float = Field(..., ge=0, le=100)
+
+    @field_validator("sign")
+    @classmethod
+    def _reject_malicious_text(cls, value: str) -> str:
+        return reject_malicious(value)
 
 
 class LearnerHistoryRequest(BaseModel):

@@ -1,57 +1,25 @@
-"""
-certificate_service.py
-
-Business logic for certificate eligibility (Milestone 2, Day 6).
-
-Scope (per SRS Milestone 2 / FR-4 / Cross-Domain Dependency Matrix):
-- Defines certificate eligibility rules.
-- Provides a pure eligibility-check function.
-- Does NOT generate PDFs (later milestone).
-- Does NOT connect to the database (Intern 5 scope).
-- Does NOT use any AI-generated outputs.
-- Kept independent of routing/transport concerns so it can be reused
-  once database-backed learner records are wired in.
-"""
-
 from typing import NamedTuple
+from io import BytesIO
+from datetime import datetime
 
-# --- Eligibility rule constants -------------------------------------------
-# Centralized here so thresholds can be tuned without touching the
-# eligibility logic itself.
+from reportlab.lib.colors import darkblue
+from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+
 MINIMUM_AVERAGE_SCORE: float = 80.0
 
 
 class LearnerProgress(NamedTuple):
-    """
-    Minimal, transport-agnostic representation of the learner data
-    required to evaluate certificate eligibility.
-
-    This mirrors the shape expected from the future database-backed
-    learner record (Intern 5 integration) so this service can be
-    swapped over with minimal changes.
-    """
     average_score: float
     all_required_letters_practiced: bool
 
 
+class CertificateNotEligibleError(Exception):
+    pass
+
+
 def check_certificate_eligibility(progress: LearnerProgress) -> dict:
-    """
-    Evaluate certificate eligibility for a single learner.
-
-    Eligibility rules (per FR-4):
-    - average_score >= 80
-    - all_required_letters_practiced == True
-
-    Args:
-        progress: LearnerProgress containing the learner's average score
-                  and whether all required letters have been practiced.
-
-    Returns:
-        dict: {
-            "eligible": bool,
-            "message": str
-        }
-    """
     score_ok = progress.average_score >= MINIMUM_AVERAGE_SCORE
     letters_ok = progress.all_required_letters_practiced
 
@@ -62,11 +30,13 @@ def check_certificate_eligibility(progress: LearnerProgress) -> dict:
         }
 
     reasons = []
+
     if not score_ok:
         reasons.append(
             f"average score {progress.average_score} is below the required "
             f"{MINIMUM_AVERAGE_SCORE}"
         )
+
     if not letters_ok:
         reasons.append("not all required letters have been practiced")
 
@@ -74,3 +44,168 @@ def check_certificate_eligibility(progress: LearnerProgress) -> dict:
         "eligible": False,
         "message": "Learner is not eligible: " + "; ".join(reasons) + ".",
     }
+
+def generate_certificate_pdf(
+    learner_name: str,
+    progress: LearnerProgress,
+    db=None,
+    user_id: str | None = None,
+) -> bytes:
+
+    result = check_certificate_eligibility(progress)
+
+    if not result["eligible"]:
+        raise CertificateNotEligibleError(result["message"])
+
+    buffer = BytesIO()
+
+    document = SimpleDocTemplate(buffer)
+
+    styles = getSampleStyleSheet()
+
+    title_style = styles["Title"]
+    title_style.alignment = TA_CENTER
+    title_style.textColor = darkblue
+
+    normal_style = styles["Normal"]
+    normal_style.alignment = TA_CENTER
+
+    story = []
+
+    story.append(Paragraph("Certificate of Achievement", title_style))
+    story.append(Spacer(1, 30))
+
+    story.append(
+        Paragraph(
+            f"This certificate is proudly presented to <b>{learner_name}</b>.",
+            normal_style,
+        )
+    )
+
+    story.append(Spacer(1, 20))
+
+    story.append(
+        Paragraph(
+            f"Average Score: <b>{progress.average_score:.2f}%</b>",
+            normal_style,
+        )
+    )
+
+    story.append(Spacer(1, 20))
+
+    story.append(
+        Paragraph(
+            f"Date: {datetime.now().strftime('%d-%m-%Y')}",
+            normal_style,
+        )
+    )
+
+    document.build(story)
+
+    pdf = buffer.getvalue()
+    buffer.close()
+
+    # Milestone 3 - Day 3 hook: certificate generated -> notify the learner.
+    if db is not None and user_id:
+        from app.services.notification_service import create_notification
+
+        create_notification(
+            db,
+            user_id=user_id,
+            title="Certificate Ready",
+            message=(
+                f"Congratulations {learner_name}! Your certificate is ready "
+                "to download."
+            ),
+            event_type="certificate_ready",
+        )
+
+    return pdf
+
+def generate_exam_certificate_pdf(
+    learner_name: str,
+    level: str,
+    score: float,
+    db=None,
+    user_id: str | None = None,
+) -> bytes:
+    buffer = BytesIO()
+
+    document = SimpleDocTemplate(buffer)
+
+    styles = getSampleStyleSheet()
+
+    title_style = styles["Title"]
+    title_style.alignment = TA_CENTER
+    title_style.textColor = darkblue
+
+    normal_style = styles["Normal"]
+    normal_style.alignment = TA_CENTER
+
+    story = []
+
+    story.append(
+        Paragraph(
+            "Certificate of Achievement",
+            title_style,
+        )
+    )
+
+    story.append(Spacer(1, 30))
+
+    story.append(
+        Paragraph(
+            f"This certificate is proudly presented to "
+            f"<b>{learner_name}</b>.",
+            normal_style,
+        )
+    )
+
+    story.append(Spacer(1, 20))
+
+    story.append(
+        Paragraph(
+            f"Certification Level: <b>{level}</b>",
+            normal_style,
+        )
+    )
+
+    story.append(Spacer(1, 15))
+
+    story.append(
+        Paragraph(
+            f"Exam Score: <b>{score:.2f}%</b>",
+            normal_style,
+        )
+    )
+
+    story.append(Spacer(1, 20))
+
+    story.append(
+        Paragraph(
+            f"Date: {datetime.now().strftime('%d-%m-%Y')}",
+            normal_style,
+        )
+    )
+
+    document.build(story)
+
+    pdf = buffer.getvalue()
+    buffer.close()
+
+    if db is not None and user_id:
+        from app.services.notification_service import create_notification
+
+        create_notification(
+            db,
+            user_id=user_id,
+            title="Certification Earned",
+            message=(
+                f"Congratulations {learner_name}! "
+                f"You passed the {level} certification exam "
+                f"with a score of {score:.2f}%."
+            ),
+            event_type="certificate_ready",
+        )
+
+    return pdf

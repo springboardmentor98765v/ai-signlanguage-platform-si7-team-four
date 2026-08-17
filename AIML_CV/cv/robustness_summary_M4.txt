@@ -1,0 +1,197 @@
+=== Per-condition summary ===
+
+bright_light  (n=156)
+  hand detection rate: 100%
+  accuracy (when hand detected): 97%
+  avg confidence: 0.92
+  avg prediction time: 36.0ms
+
+cluttered_bg  (n=156)
+  hand detection rate: 100%
+  accuracy (when hand detected): 97%
+  avg confidence: 0.90
+  avg prediction time: 34.7ms
+
+dim_light  (n=156)
+  hand detection rate: 100%
+  accuracy (when hand detected): 97%
+  avg confidence: 0.91
+  avg prediction time: 33.7ms
+
+tilted_hand  (n=156)
+  hand detection rate: 100%
+  accuracy (when hand detected): 99%
+  avg confidence: 0.91
+  avg prediction time: 33.2ms
+
+=== Per-tester summary ===
+
+person1  (n=312)
+  accuracy (when hand detected): 98%
+
+person2  (n=312)
+  accuracy (when hand detected): 98%
+
+=== Per-letter robustness summary ===
+
+Letter A
+  bright_light: accuracy=100%, confidence=0.99, samples=6
+  cluttered_bg: accuracy=100%, confidence=0.96, samples=6
+  dim_light: accuracy=100%, confidence=1.00, samples=6
+  tilted_hand: accuracy=100%, confidence=0.99, samples=6
+
+Letter B
+  bright_light: accuracy=100%, confidence=1.00, samples=6
+  cluttered_bg: accuracy=100%, confidence=1.00, samples=6
+  dim_light: accuracy=100%, confidence=1.00, samples=6
+  tilted_hand: accuracy=100%, confidence=1.00, samples=6
+
+Letter C
+  bright_light: accuracy=100%, confidence=0.95, samples=6
+  cluttered_bg: accuracy=100%, confidence=0.92, samples=6
+  dim_light: accuracy=100%, confidence=0.95, samples=6
+  tilted_hand: accuracy=100%, confidence=0.96, samples=6
+
+Letter D
+  bright_light: accuracy=100%, confidence=0.98, samples=6
+  cluttered_bg: accuracy=100%, confidence=0.98, samples=6
+  dim_light: accuracy=100%, confidence=0.92, samples=6
+  tilted_hand: accuracy=100%, confidence=0.96, samples=6
+
+Letter E
+  bright_light: accuracy=100%, confidence=0.97, samples=6
+  cluttered_bg: accuracy=100%, confidence=0.99, samples=6
+  dim_light: accuracy=100%, confidence=0.99, samples=6
+  tilted_hand: accuracy=100%, confidence=1.00, samples=6
+
+Letter F
+  bright_light: accuracy=100%, confidence=0.97, samples=6
+  cluttered_bg: accuracy=100%, confidence=0.99, samples=6
+  dim_light: accuracy=100%, confidence=0.99, samples=6
+  tilted_hand: accuracy=100%, confidence=0.99, samples=6
+
+Letter G
+  bright_light: accuracy=100%, confidence=0.93, samples=6
+  cluttered_bg: accuracy=100%, confidence=0.93, samples=6
+  dim_light: accuracy=100%, confidence=0.96, samples=6
+  tilted_hand: accuracy=100%, confidence=0.89, samples=6
+
+Letter H
+  bright_light: accuracy=100%, confidence=0.96, samples=6
+  cluttered_bg: accuracy=100%, confidence=0.94, samples=6
+  dim_light: accuracy=100%, confidence=0.94, samples=6
+  tilted_hand: accuracy=100%, confidence=0.94, samples=6
+
+Letter I
+  bright_light: accuracy=100%, confidence=0.98, samples=6
+  cluttered_bg: accuracy=100%, confidence=0.93, samples=6
+  dim_light: accuracy=100%, confidence=0.90, samples=6
+  tilted_hand: accuracy=100%, confidence=0.91, samples=6
+
+Letter J
+  bright_light: accuracy=83%, confidence=0.71, samples=6
+    Common mistakes: [('I', 1)]
+  cluttered_bg: accuracy=100%, confidence=0.58, samples=6
+  dim_light: accuracy=83%, confidence=0.56, samples=6
+    Common mistakes: [('I', 1)]
+  tilted_hand: accuracy=100%, confidence=0.57, samples=6
+
+Letter K
+  bright_light: accuracy=100%, confidence=0.96, samples=6
+  cluttered_bg: accuracy=100%, confidence=0.93, samples=6
+  dim_light: accuracy=100%, confidence=0.91, samples=6
+  tilted_hand: accuracy=100%, confidence=0.98, samples=6
+
+Letter L
+  bright_light: accuracy=100%, confidence=0.97, samples=6
+  cluttered_bg: accuracy=100%, confidence=0.92, samples=6
+  dim_light: accuracy=100%, confidence=0.96, samples=6
+  tilted_hand: accuracy=100%, confidence=0.93, samples=6
+
+Letter M
+  bright_light: accuracy=100%, confidence=0.97, samples=6
+  cluttered_bg: accuracy=100%, confidence=0.97, samples=6
+  dim_light: accuracy=100%, confidence=0.95, samples=6
+  tilted_hand: accuracy=100%, confidence=0.98, samples=6
+
+Letter N
+  bright_light: accuracy=100%, confidence=0.96, samples=6
+  cluttered_bg: accuracy=100%, confidence=0.90, samples=6
+  dim_light: accuracy=100%, confidence=0.97, samples=6
+  tilted_hand: accuracy=100%, confidence=0.93, samples=6
+
+Letter O
+  bright_light: accuracy=100%, confidence=0.94, samples=6
+  cluttered_bg: accuracy=100%, confidence=0.94, samples=6
+  dim_light: accuracy=100%, confidence=0.91, samples=6
+  tilted_hand: accuracy=100%, confidence=0.95, samples=6
+
+Letter P
+  bright_light: accuracy=100%, confidence=0.90, samples=6
+  cluttered_bg: accuracy=100%, confidence=0.92, samples=6
+  dim_light: accuracy=100%, confidence=0.94, samples=6
+  tilted_hand: accuracy=100%, confidence=0.96, samples=6
+
+Letter Q
+  bright_light: accuracy=100%, confidence=0.92, samples=6
+  cluttered_bg: accuracy=100%, confidence=0.91, samples=6
+  dim_light: accuracy=100%, confidence=0.90, samples=6
+  tilted_hand: accuracy=100%, confidence=0.77, samples=6
+
+Letter R
+  bright_light: accuracy=50%, confidence=0.57, samples=6
+    Common mistakes: [('U', 3)]
+  cluttered_bg: accuracy=33%, confidence=0.55, samples=6
+    Common mistakes: [('U', 4)]
+  dim_light: accuracy=50%, confidence=0.66, samples=6
+    Common mistakes: [('U', 3)]
+  tilted_hand: accuracy=67%, confidence=0.64, samples=6
+    Common mistakes: [('U', 2)]
+
+Letter S
+  bright_light: accuracy=100%, confidence=0.99, samples=6
+  cluttered_bg: accuracy=100%, confidence=1.00, samples=6
+  dim_light: accuracy=100%, confidence=0.98, samples=6
+  tilted_hand: accuracy=100%, confidence=0.97, samples=6
+
+Letter T
+  bright_light: accuracy=100%, confidence=0.89, samples=6
+  cluttered_bg: accuracy=100%, confidence=0.81, samples=6
+  dim_light: accuracy=100%, confidence=0.87, samples=6
+  tilted_hand: accuracy=100%, confidence=0.83, samples=6
+
+Letter U
+  bright_light: accuracy=100%, confidence=0.84, samples=6
+  cluttered_bg: accuracy=100%, confidence=0.87, samples=6
+  dim_light: accuracy=100%, confidence=0.89, samples=6
+  tilted_hand: accuracy=100%, confidence=0.83, samples=6
+
+Letter V
+  bright_light: accuracy=100%, confidence=0.92, samples=6
+  cluttered_bg: accuracy=100%, confidence=0.90, samples=6
+  dim_light: accuracy=100%, confidence=0.91, samples=6
+  tilted_hand: accuracy=100%, confidence=0.95, samples=6
+
+Letter W
+  bright_light: accuracy=100%, confidence=0.99, samples=6
+  cluttered_bg: accuracy=100%, confidence=1.00, samples=6
+  dim_light: accuracy=100%, confidence=0.99, samples=6
+  tilted_hand: accuracy=100%, confidence=0.97, samples=6
+
+Letter X
+  bright_light: accuracy=100%, confidence=0.86, samples=6
+  cluttered_bg: accuracy=100%, confidence=0.82, samples=6
+  dim_light: accuracy=100%, confidence=0.82, samples=6
+  tilted_hand: accuracy=100%, confidence=0.86, samples=6
+
+Letter Y
+  bright_light: accuracy=100%, confidence=0.94, samples=6
+  cluttered_bg: accuracy=100%, confidence=0.99, samples=6
+  dim_light: accuracy=100%, confidence=0.96, samples=6
+  tilted_hand: accuracy=100%, confidence=0.95, samples=6
+
+Letter Z
+  bright_light: accuracy=100%, confidence=0.82, samples=6
+  cluttered_bg: accuracy=100%, confidence=0.83, samples=6
+  dim_light: accuracy=100%, confidence=0.89, samples=6
+  tilted_hand: accuracy=100%, confidence=0.88, samples=6

@@ -1,15 +1,22 @@
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List
 from datetime import datetime
+
+from app.utils.validation import reject_malicious
 
 router = APIRouter(prefix="/api/v1/feedback", tags=["Community Feedback & Support"])
 
 class FeedbackCreate(BaseModel):
     user_id: int
-    category: str = Field(..., description="E.g., Gesture Recognition, Dictionary, General")
+    category: str = Field(..., max_length=50, description="E.g., Gesture Recognition, Dictionary, General")
     rating: int = Field(..., ge=1, le=5, description="Rating scale from 1 to 5")
-    comments: str
+    comments: str = Field(..., min_length=1, max_length=2000)
+
+    @field_validator("category", "comments")
+    @classmethod
+    def _reject_malicious_text(cls, value: str) -> str:
+        return reject_malicious(value)
 
 class FeedbackResponse(BaseModel):
     id: int
@@ -17,7 +24,7 @@ class FeedbackResponse(BaseModel):
     category: str
     rating: int
     comments: str
-    submitted_at: str
+    submitted_at: datetime
 
     class Config:
         from_attributes = True
@@ -30,7 +37,7 @@ FEEDBACK_DB = [
         "category": "Gesture Recognition",
         "rating": 5,
         "comments": "The real-time translation accuracy has improved significantly!",
-        "submitted_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "submitted_at": datetime.now()
     }
 ]
 
@@ -46,7 +53,7 @@ def submit_feedback(feedback: FeedbackCreate):
         "category": feedback.category,
         "rating": feedback.rating,
         "comments": feedback.comments,
-        "submitted_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "submitted_at": datetime.now()
     }
     FEEDBACK_DB.append(new_record)
     return new_record

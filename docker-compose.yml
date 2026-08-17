@@ -1,3 +1,11 @@
+# Local-only dev stack (per SRS: no live/public deployment).
+# `docker compose up` runs the full backend stack on this machine:
+#   postgres  -> local PostgreSQL 16
+#   backend   -> FastAPI app built from Dockerfile.backend
+#   ai-service-> AI/MediaPipe service built from Dockerfile.ai
+#
+# All published ports are bound to 127.0.0.1 so nothing is exposed beyond
+# localhost. The CI workflow only builds the backend image; it does not deploy.
 services:
   postgres:
     image: postgres:16
@@ -8,7 +16,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-signlang_dev_pw}
       POSTGRES_DB: ${POSTGRES_DB:-signlang_db}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - signlang_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -24,7 +32,7 @@ services:
     container_name: signlang-ai
     restart: unless-stopped
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=5)"]
       interval: 10s
@@ -38,20 +46,37 @@ services:
       dockerfile: Dockerfile.backend
     container_name: signlang-backend
     restart: unless-stopped
+    # NOTE: DATABASE_URL is intentionally NOT pulled from the repo-root .env
+    # (which points at localhost for non-Docker runs). Inside the container the
+    # backend must reach the `postgres` service over the compose network, so the
+    # DB persists via the named `signlang_pgdata` volume below.
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://signlang:signlang_dev_pw@postgres:5432/signlang_db}
-      JWT_SECRET: ${JWT_SECRET}
+      SECRET_KEY: ${SECRET_KEY:-signlang_compose_dev_secret_change_me}
+      JWT_SECRET: ${JWT_SECRET:-}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
       AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai-service:8001}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-4}
       EMAIL_HOST: ${EMAIL_HOST:-smtp.gmail.com}
       EMAIL_APP_PASSWORD: ${EMAIL_APP_PASSWORD:-}
       PDF_OUTPUT_DIR: ${PDF_OUTPUT_DIR:-/app/certificates}
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
       ai-service:
         condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
 volumes:
   signlang_pgdata:

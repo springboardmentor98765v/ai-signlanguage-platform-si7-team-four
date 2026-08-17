@@ -1,0 +1,58 @@
+=== Per-condition summary (dynamic signs) ===
+
+bright_light  (n=42)
+  accuracy: 93%
+  match rate (found a sign within threshold): 100%
+  avg confidence: 0.83
+  avg matching time: 59.8ms
+
+cluttered_bg  (n=42)
+  accuracy: 98%
+  match rate (found a sign within threshold): 100%
+  avg confidence: 0.83
+  avg matching time: 59.7ms
+
+dim_light  (n=42)
+  accuracy: 95%
+  match rate (found a sign within threshold): 100%
+  avg confidence: 0.83
+  avg matching time: 58.6ms
+
+tilted_hand  (n=42)
+  accuracy: 95%
+  match rate (found a sign within threshold): 100%
+  avg confidence: 0.82
+  avg matching time: 60.3ms
+
+=== Per-tester summary ===
+
+person1  (n=84)
+  accuracy: 94%
+
+person2  (n=84)
+  accuracy: 96%
+
+=== Per-sign summary ===
+
+J  (n=24)
+  accuracy: 100%, avg distance: 0.84, avg confidence: 0.80
+
+Z  (n=24)
+  accuracy: 88%, avg distance: 1.22, avg confidence: 0.62
+    Common mistakes: [('hello', 2), ('thank_you', 1)]
+
+hello  (n=24)
+  accuracy: 79%, avg distance: 1.29, avg confidence: 0.82
+    Common mistakes: [('thank_you', 5)]
+
+no  (n=24)
+  accuracy: 100%, avg distance: 1.24, avg confidence: 0.89
+
+please  (n=24)
+  accuracy: 100%, avg distance: 1.20, avg confidence: 0.92
+
+thank_you  (n=24)
+  accuracy: 100%, avg distance: 1.15, avg confidence: 0.89
+
+yes  (n=24)
+  accuracy: 100%, avg distance: 0.86, avg confidence: 0.84

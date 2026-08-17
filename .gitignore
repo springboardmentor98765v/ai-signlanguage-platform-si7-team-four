@@ -34,6 +34,10 @@ env/
 
 # Environment files
 .env
+.env.*
+!.env.example
+!.env.production.example
+!.env.backend.example
 
 # Database backups
 backups/

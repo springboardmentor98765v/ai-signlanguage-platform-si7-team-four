@@ -1,21 +1,28 @@
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from typing import List
 from datetime import datetime
+
+from app.utils.validation import reject_malicious
 
 router = APIRouter(prefix="/api/v1/translations", tags=["Translation History & Logs"])
 
 class TranslationRecord(BaseModel):
     user_id: int
-    translated_text: str
-    confidence_level: float
+    translated_text: str = Field(..., min_length=1, max_length=2000)
+    confidence_level: float = Field(..., ge=0.0, le=1.0)
+
+    @field_validator("translated_text")
+    @classmethod
+    def _reject_malicious_text(cls, value: str) -> str:
+        return reject_malicious(value)
 
 class TranslationResponse(BaseModel):
     id: int
     user_id: int
     translated_text: str
     confidence_level: float
-    timestamp: str
+    timestamp: datetime
 
     class Config:
         from_attributes = True
@@ -32,14 +39,14 @@ def get_translation_history(user_id: int):
             "user_id": user_id,
             "translated_text": "Hello, welcome to sign language platform",
             "confidence_level": 0.96,
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "timestamp": datetime.now()
         },
         {
             "id": 102,
             "user_id": user_id,
             "translated_text": "Thank you for your assistance",
             "confidence_level": 0.91,
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "timestamp": datetime.now()
         }
     ]
     return mock_history
@@ -58,5 +65,5 @@ def log_new_translation(record: TranslationRecord):
         "user_id": record.user_id,
         "translated_text": record.translated_text,
         "confidence_level": record.confidence_level,
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "timestamp": datetime.now()
     }

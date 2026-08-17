@@ -1,14 +1,20 @@
 from fastapi import APIRouter, HTTPException, status, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.models import User
+from app.utils.validation import reject_malicious
 
 router = APIRouter(prefix="/api/instructor", tags=["Instructor-Student Management"])
 
 class AssignStudentRequest(BaseModel):
     instructor_email: str
     student_email: str
+
+    @field_validator("instructor_email", "student_email")
+    @classmethod
+    def _reject_malicious_emails(cls, value: str) -> str:
+        return reject_malicious(value)
 
 @router.post("/assign-student", status_code=status.HTTP_200_OK)
 def assign_student_to_instructor(data: AssignStudentRequest, db: Session = Depends(get_db)):

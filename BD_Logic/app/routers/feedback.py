@@ -14,6 +14,7 @@ router = APIRouter(
 class AssessmentResultRequest(BaseModel):
     scores: Dict[str, float]
     is_correct: bool = False
+    possible_issue: str | None = None
 
 
 class FeedbackResponse(BaseModel):
@@ -32,8 +33,10 @@ def get_feedback(request: AssessmentResultRequest):
         )
 
     result = generate_feedback(
-        assessment_result=request.scores,
-        is_correct=request.is_correct,
+    assessment_result=request.scores,
+    is_correct=request.is_correct,
+    possible_issue=request.possible_issue,
+    
     )
 
     return FeedbackResponse(**result)
