@@ -1,34 +1,19 @@
-"""
-certificate.py
-
-Router for certificate-related endpoints (Milestone 2, Day 6).
-
-Scope (per SRS Milestone 2 / FR-4 / Cross-Domain Dependency Matrix):
-- Exposes a single eligibility-check endpoint.
-- Contains NO business logic (delegates to certificate_service.py).
-- Does NOT generate PDFs (later milestone).
-- Does NOT connect to the database (Intern 5 scope) — request data is
-  supplied directly by the caller for now.
-"""
-
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
 from app.services.certificate_service import (
+    CertificateNotEligibleError,
     LearnerProgress,
     check_certificate_eligibility,
+    generate_certificate_pdf,
 )
 
 router = APIRouter(prefix="/certificate", tags=["Certificate"])
 
 
 class CertificateEligibilityRequest(BaseModel):
-    average_score: float = Field(
-        ..., ge=0, le=100, description="Learner's average assessment score (0-100)."
-    )
-    all_required_letters_practiced: bool = Field(
-        ..., description="Whether the learner has practiced all required letters."
-    )
+    average_score: float = Field(..., ge=0, le=100)
+    all_required_letters_practiced: bool = Field(...)
 
 
 class CertificateEligibilityResponse(BaseModel):
@@ -40,13 +25,35 @@ class CertificateEligibilityResponse(BaseModel):
 def check_eligibility(
     request: CertificateEligibilityRequest,
 ) -> CertificateEligibilityResponse:
-    """
-    Check whether a learner is eligible for a certificate based on
-    their average score and letter-practice completion.
-    """
     progress = LearnerProgress(
         average_score=request.average_score,
         all_required_letters_practiced=request.all_required_letters_practiced,
     )
     result = check_certificate_eligibility(progress)
     return CertificateEligibilityResponse(**result)
+
+@router.get("/generate-pdf")
+def generate_pdf(
+    learner_name: str = Query(...),
+    average_score: float = Query(..., ge=0, le=100),
+    all_required_letters_practiced: bool = Query(...),
+):
+    progress = LearnerProgress(
+        average_score=average_score,
+        all_required_letters_practiced=all_required_letters_practiced,
+    )
+
+    try:
+        pdf_buffer = generate_certificate_pdf(learner_name, progress)
+    except CertificateNotEligibleError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    filename = f"{learner_name.replace(' ', '_')}_certificate.pdf"
+
+    return Response(
+        content=pdf_buffer,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        },
+    )
