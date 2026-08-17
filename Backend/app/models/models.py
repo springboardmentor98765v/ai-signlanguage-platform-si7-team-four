@@ -30,7 +30,7 @@ class User(Base):
 
 class Course(Base):
     __tablename__ = "courses"
-    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
+    id = Column(String(36), primary_key=True, default=new_id)
     title = Column(String(150), nullable=False)
     description = Column(Text)
     level = Column(String(30), nullable=False, default="Beginner")
@@ -40,9 +40,14 @@ class Course(Base):
 
 class Module(Base):
     __tablename__ = "modules"
-    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
-    course_id = Column(UUID(as_uuid=False), ForeignKey("courses.id"), nullable=False)
+    # id/course_id are String(36) (not UUID(as_uuid=False)) so the legacy
+    # curriculum ids ("mod_alphabet_101", "course_alphabet_101") can be stored
+    # on SQLite; the postgresql.UUID type rejects non-UUID strings on bind.
+    id = Column(String(36), primary_key=True, default=new_id)
+    course_id = Column(String(36), ForeignKey("courses.id"), nullable=False)
     module_name = Column(String(150), nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
     course = relationship("Course", back_populates="modules")
     lessons = relationship("Lesson", back_populates="module")
@@ -50,9 +55,10 @@ class Module(Base):
 
 class Lesson(Base):
     __tablename__ = "lessons"
-    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
+    # id/module_id are String(36) for the same reason as Module (legacy ids).
+    id = Column(String(36), primary_key=True, default=new_id)
     slug = Column(String(100), unique=True, index=True)
-    module_id = Column(UUID(as_uuid=False), ForeignKey("modules.id"), nullable=True)
+    module_id = Column(String(36), ForeignKey("modules.id"), nullable=True)
     title = Column(String(150), nullable=False)
     description = Column(Text, nullable=True)
     expected_gesture = Column(String(5), nullable=True)
