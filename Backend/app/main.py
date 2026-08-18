@@ -47,6 +47,14 @@ def _apply_sqlite_schema_migrations():
 
 _apply_sqlite_schema_migrations()
 
+# Ensure all database tables exist BEFORE routers are imported. The course
+# router seeds the alphabet module/lessons at import time and queries the
+# "modules" table, so create_all() must run first or startup crashes with
+# "relation modules does not exist" on a fresh database.
+from app.db.database import engine, Base
+from app.models import models
+Base.metadata.create_all(bind=engine)
+
 # Import all project routers
 from app.routers.profile_router import router as profile_router
 from app.routers.gesture_router import router as gesture_router
@@ -60,11 +68,6 @@ from app.routers.admin_router import router as admin_router
 from app.routers.instructor_router import router as instructor_router
 from app.routers.notification_router import router as notification_router
 from app.routers import auth, course, practice, trainer_router
-from app.db.database import engine, Base
-from app.models import models
-
-# Ensure all database tables exist on startup
-Base.metadata.create_all(bind=engine)
 
 
 app = FastAPI(
