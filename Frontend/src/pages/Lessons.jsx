@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 export default function Lessons() {
   const [courses, setCourses] = useState([]);
   const [selectedCourse, setSelectedCourse] = useState(null);
@@ -11,7 +13,7 @@ export default function Lessons() {
 
   useEffect(() => {
     const token = localStorage.getItem('access_token');
-    fetch('http://localhost:8000/api/courses', {
+    fetch(`${API_BASE_URL}/api/courses`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => res.json())
@@ -46,7 +48,7 @@ export default function Lessons() {
   const fetchCourseDetails = (courseId) => {
     setLoading(true);
     const token = localStorage.getItem('access_token');
-    fetch(`http://localhost:8000/api/courses/${courseId}`, {
+    fetch(`${API_BASE_URL}/api/courses/${courseId}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => res.json())

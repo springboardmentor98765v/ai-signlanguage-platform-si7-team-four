@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 export default function Leaderboard() {
   const [sortMetric, setSortMetric] = useState('accuracy'); // 'accuracy' or 'streak'
   const [learners, setLearners] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`http://localhost:8000/api/analytics/leaderboard?sort=${sortMetric}`)
+    fetch(`${API_BASE_URL}/api/analytics/leaderboard?sort=${sortMetric}`)
       .then((res) => res.json())
       .then((data) => {
         setLearners(data);
