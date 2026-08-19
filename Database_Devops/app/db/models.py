@@ -33,6 +33,12 @@ class User(Base):
 
     # Increased from 20 to 50 so "Accessibility Trainer" fits safely.
     role = Column(String(50), nullable=False, default="Learner")
+    is_active = Column(Boolean, nullable=False, default=True)
+    instructor_id = Column(
+        UUID(as_uuid=False),
+        ForeignKey("users.id"),
+        nullable=True,
+    )
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -108,6 +114,8 @@ class Module(Base):
         nullable=False,
     )
     module_name = Column(String(150), nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
     course = relationship("Course", back_populates="modules")
     lessons = relationship("Lesson", back_populates="module")
