@@ -49,8 +49,8 @@ def main():
     access_token = resp.json().get("access_token")
     headers = {"Authorization": f"Bearer {access_token}"}
 
-    resp = requests.get(f"{BASE_URL}/courses/modules")
-    ok = check("GET /courses/modules returns 200", resp.status_code == 200, f"got {resp.status_code}")
+    resp = requests.get(f"{BASE_URL}/api/courses/modules")
+    ok = check("GET /api/courses/modules returns 200", resp.status_code == 200, f"got {resp.status_code}")
     if not ok:
         print(f"        Response body: {resp.text}")
         sys.exit(1)
@@ -59,7 +59,7 @@ def main():
     check("Modules list is valid JSON array", isinstance(resp.json(), list))
 
     resp = requests.post(
-        f"{BASE_URL}/courses/modules",
+        f"{BASE_URL}/api/courses/modules",
         json={
             "title": "Day 6 Test Module",
             "description": "Created by integration test",
@@ -67,12 +67,12 @@ def main():
         },
         headers=headers,
     )
-    ok = check("POST /courses/modules returns 201 (with Instructor token)", resp.status_code == 201, f"got {resp.status_code}")
+    ok = check("POST /api/courses/modules returns 201 (with Instructor token)", resp.status_code == 201, f"got {resp.status_code}")
     if not ok:
         print(f"        Response body: {resp.text}")
         sys.exit(1)
 
-    resp = requests.get(f"{BASE_URL}/courses/modules")
+    resp = requests.get(f"{BASE_URL}/api/courses/modules")
     new_count = len(resp.json()) if resp.status_code == 200 else -1
     check(
         "Module count increased after creation",
@@ -81,10 +81,10 @@ def main():
     )
 
     resp = requests.post(
-        f"{BASE_URL}/courses/modules",
+        f"{BASE_URL}/api/courses/modules",
         json={"title": "Should Fail", "description": "No auth", "course_id": "x"},
     )
-    check("POST /courses/modules without token returns 401", resp.status_code == 401, f"got {resp.status_code}")
+    check("POST /api/courses/modules without token returns 401", resp.status_code == 401, f"got {resp.status_code}")
 
     print("\n" + "=" * 70)
     passed = sum(1 for _, s in results if s == "PASS")
