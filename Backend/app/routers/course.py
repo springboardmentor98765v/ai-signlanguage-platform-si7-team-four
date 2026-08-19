@@ -94,6 +94,33 @@ _seed_db.close()
 # --- CRUD READ ENDPOINTS ---
 
 @router.get(
+    "",
+    status_code=status.HTTP_200_OK,
+    summary="List Courses",
+    description="Returns the course catalog, each course with its total lesson count (DB-backed).",
+)
+def list_courses(db: Session = Depends(get_db)):
+    courses = db.query(models.Course).order_by(models.Course.id.asc()).all()
+    items = []
+    for c in courses:
+        lesson_count = (
+            db.query(models.Lesson)
+            .join(models.Module, models.Module.id == models.Lesson.module_id)
+            .filter(models.Module.course_id == c.id)
+            .count()
+        )
+        items.append({
+            "course_id": c.id,
+            "title": c.title,
+            "description": c.description or "",
+            "level": c.level or "Beginner",
+            "category": "Alphabet",
+            "total_lessons": lesson_count,
+        })
+    return {"courses": items}
+
+
+@router.get(
     "/modules",
     response_model=List[ModuleResponse],
     status_code=status.HTTP_200_OK,
@@ -135,6 +162,55 @@ def get_lessons_by_module(module_id: str, db: Session = Depends(get_db)):
         .all()
     )
     return [_lesson_to_response(lesson) for lesson in module_lessons]
+
+
+@router.get(
+    "/{course_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Get Course Details",
+    description="Returns a single course with its nested modules and lessons.",
+)
+def get_course_details(course_id: str, db: Session = Depends(get_db)):
+    course = db.query(models.Course).filter(models.Course.id == course_id).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    module_list = []
+    mods = (
+        db.query(models.Module)
+        .filter(models.Module.course_id == course.id)
+        .order_by(models.Module.id.asc())
+        .all()
+    )
+    for mod in mods:
+        lessons = (
+            db.query(models.Lesson)
+            .filter(models.Lesson.module_id == mod.id)
+            .order_by(models.Lesson.id.asc())
+            .all()
+        )
+        module_list.append({
+            "module_id": mod.id,
+            "module_name": mod.module_name,
+            "lessons": [
+                {
+                    "lesson_id": l.id,
+                    "title": l.title,
+                    "description": l.description or "",
+                    "expected_gesture": l.expected_gesture,
+                    "difficulty": (l.difficulty or "Easy").capitalize(),
+                }
+                for l in lessons
+            ],
+        })
+
+    return {
+        "course_id": course.id,
+        "title": course.title,
+        "description": course.description or "",
+        "level": course.level or "Beginner",
+        "modules": module_list,
+    }
 
 
 # --- CRUD CREATE ENDPOINTS (PROTECTED BY RBAC) ---

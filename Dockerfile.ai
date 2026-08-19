@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 WORKDIR /code
 
@@ -23,7 +23,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
 #COPY ONLY required production modules and model artifacts (excludes dataset/raw & notebooks)
 COPY AIML_CV/api ./AIML_CV/api
 COPY AIML_CV/cv ./AIML_CV/cv
-COPY AIML_CV/ml ./AIML_CV/ml
+COPY AIML_CV/ml/sign_model.joblib ./AIML_CV/ml/sign_model.joblib
+COPY AIML_CV/ml/dynamic_templates.joblib ./AIML_CV/ml/dynamic_templates.joblib
+COPY AIML_CV/ml/optimize_model.py ./AIML_CV/ml/optimize_model.py
 COPY AIML_CV/models ./AIML_CV/models
 
 WORKDIR /code/AIML_CV/api

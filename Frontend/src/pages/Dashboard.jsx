@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
@@ -11,8 +13,8 @@ export default function Dashboard() {
 
   useEffect(() => {
     Promise.all([
-      fetch('http://localhost:8000/api/analytics/dashboard').then((res) => res.json()),
-      fetch('http://localhost:8000/api/analytics/recommendations').then((res) => res.json()),
+      fetch(`${API_BASE_URL}/api/analytics/dashboard`).then((res) => res.json()),
+      fetch(`${API_BASE_URL}/api/analytics/recommendations`).then((res) => res.json()),
     ])
       .then(([dashData, recData]) => {
         setStats(dashData);
