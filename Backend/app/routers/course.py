@@ -41,9 +41,9 @@ def _module_to_response(mod: models.Module, lessons: List[models.Lesson]) -> Mod
 def _seed_alphabet_course(db: Session) -> None:
     """
     Idempotently seed the static Alphabet Course (module + 26 lessons) into the
-    real database so course data survives restarts. Uses the legacy string ids
-    ("mod_alphabet_101", "les_alphabet_*") to preserve the API contract on both
-    SQLite and PostgreSQL (the columns are String(36), not native UUID).
+    real database so course data survives restarts. Primary keys are generated
+    UUIDs (native PostgreSQL UUID columns) and idempotency is keyed by the
+    module name / lesson slug, matching Database_Devops/seed_lessons.py.
     """
     existing = db.query(models.Module).filter(
         models.Module.module_name == ALPHABET_MODULE_NAME
@@ -52,29 +52,31 @@ def _seed_alphabet_course(db: Session) -> None:
         return
 
     letters = [chr(c) for c in range(ord("A"), ord("Z") + 1)]
-    course_pk = "course_alphabet_101"
-    mod_id = "mod_alphabet_101"
 
-    if db.query(models.Course).filter(models.Course.id == course_pk).first() is None:
+    if db.query(models.Course).filter(models.Course.title == ALPHABET_MODULE_NAME).first() is None:
         db.add(models.Course(
-            id=course_pk,
             title=ALPHABET_MODULE_NAME,
             description=ALPHABET_MODULE_DESCRIPTION,
             level="Beginner",
         ))
+        db.flush()
 
-    db.add(models.Module(
-        id=mod_id,
-        course_id=course_pk,
+    course = db.query(models.Course).filter(
+        models.Course.title == ALPHABET_MODULE_NAME
+    ).one()
+
+    mod = models.Module(
+        course_id=course.id,
         module_name=ALPHABET_MODULE_NAME,
         description=ALPHABET_MODULE_DESCRIPTION,
-    ))
+    )
+    db.add(mod)
+    db.flush()
 
-    for i, letter in enumerate(letters):
+    for letter in letters:
         db.add(models.Lesson(
-            id=f"les_alphabet_{letter.lower()}",
             slug=f"alphabet-{letter.lower()}",
-            module_id=mod_id,
+            module_id=mod.id,
             title=f"The Letter {letter}",
             description=f"Imitate the visual posture prompt to master signing the alphabet letter '{letter}'.",
             expected_gesture=letter,
