@@ -16,7 +16,7 @@ from app.models.models import (
     Assessment,
     Certificate,
     PracticeSession,
-    TrainerLearnerLink,
+    AccessibilityTrainerLearner,
     User,
     WeeklyAnalytics,
 )
@@ -25,10 +25,10 @@ from app.models.models import (
 def assigned_learners(db: Session, trainer_id: str) -> list[dict]:
     """Learners linked to this trainer, with assignment timestamp."""
     rows = (
-        db.query(TrainerLearnerLink, User)
-        .join(User, User.id == TrainerLearnerLink.learner_id)
-        .filter(TrainerLearnerLink.trainer_id == trainer_id)
-        .order_by(TrainerLearnerLink.assigned_at.desc())
+        db.query(AccessibilityTrainerLearner, User)
+        .join(User, User.id == AccessibilityTrainerLearner.learner_id)
+        .filter(AccessibilityTrainerLearner.trainer_id == trainer_id)
+        .order_by(AccessibilityTrainerLearner.assigned_at.desc())
         .all()
     )
     return [
@@ -45,10 +45,10 @@ def assigned_learners(db: Session, trainer_id: str) -> list[dict]:
 
 def is_assigned(db: Session, trainer_id: str, learner_id: str) -> bool:
     return (
-        db.query(TrainerLearnerLink)
+        db.query(AccessibilityTrainerLearner)
         .filter(
-            TrainerLearnerLink.trainer_id == trainer_id,
-            TrainerLearnerLink.learner_id == learner_id,
+            AccessibilityTrainerLearner.trainer_id == trainer_id,
+            AccessibilityTrainerLearner.learner_id == learner_id,
         )
         .first()
         is not None

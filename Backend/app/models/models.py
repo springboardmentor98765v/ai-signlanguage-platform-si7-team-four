@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, ForeignKey, Text
+from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, ForeignKey, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -26,6 +26,17 @@ class User(Base):
     analytics = relationship("AnalyticsSummary", back_populates="user", uselist=False)
     weekly_analytics = relationship("WeeklyAnalytics", back_populates="user")
     certificates = relationship("Certificate", back_populates="user")
+
+    trainer_assignments = relationship(
+        "AccessibilityTrainerLearner",
+        foreign_keys="AccessibilityTrainerLearner.trainer_id",
+        back_populates="trainer",
+    )
+    learner_assignments = relationship(
+        "AccessibilityTrainerLearner",
+        foreign_keys="AccessibilityTrainerLearner.learner_id",
+        back_populates="learner",
+    )
 
 
 class Course(Base):
@@ -153,21 +164,27 @@ class InstructorStudent(Base):
     assigned_at = Column(DateTime, default=datetime.utcnow)
 
 
-class TrainerLearnerLink(Base):
+class AccessibilityTrainerLearner(Base):
     """
-    Milestone 4: Accessibility Trainer -> Learner assignment.
+    Shared Trainer -> Learner assignment model (Intern 5 / Database-DevOps).
 
-    One row per (trainer, learner) pair. `users.instructor_id` was considered but is
-    Instructor-flavored and shared with a different role flow; a dedicated link table
-    keeps Trainer assignments explicit and independently queryable.
+    One row per (trainer, learner) pair. A dedicated link table keeps Trainer
+    assignments explicit and independently queryable, and the unique constraint
+    makes re-assigning idempotent.
     """
-    __tablename__ = "trainer_learner_links"
+    __tablename__ = "accessibility_trainer_learner"
+    __table_args__ = (
+        UniqueConstraint("trainer_id", "learner_id", name="uq_trainer_learner"),
+    )
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
     trainer_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False, index=True)
     learner_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False, index=True)
 
     assigned_at = Column(DateTime, default=datetime.utcnow)
+
+    trainer = relationship("User", foreign_keys=[trainer_id], back_populates="trainer_assignments")
+    learner = relationship("User", foreign_keys=[learner_id], back_populates="learner_assignments")
 
 
 # ============================================================
