@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { changePassword } from '../services/api';
 
 export default function Profile() {
   const [user] = useState(() => {
@@ -8,15 +9,41 @@ export default function Profile() {
 
   const [passwords, setPasswords] = useState({ old: '', newPass: '', confirm: '' });
   const [msg, setMsg] = useState('');
+  const [isError, setIsError] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handlePasswordChange = (e) => {
+  const handlePasswordChange = async (e) => {
     e.preventDefault();
+    setMsg('');
+    setIsError(false);
+
     if (passwords.newPass !== passwords.confirm) {
+      setIsError(true);
       setMsg('New passwords do not match');
       return;
     }
-    setMsg('Password updated successfully!');
-    setPasswords({ old: '', newPass: '', confirm: '' });
+
+    if (passwords.newPass.length < 6) {
+      setIsError(true);
+      setMsg('New password must be at least 6 characters long');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await changePassword({
+        oldPassword: passwords.old,
+        newPassword: passwords.newPass,
+      });
+      setIsError(false);
+      setMsg(response.message || 'Password updated successfully!');
+      setPasswords({ old: '', newPass: '', confirm: '' });
+    } catch (err) {
+      setIsError(true);
+      setMsg(err.message || 'Failed to update password');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -57,7 +84,15 @@ export default function Profile() {
         </h3>
 
         {msg && (
-          <div style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', backgroundColor: msg.includes('successfully') ? 'var(--success-bg)' : 'var(--danger-bg)', color: msg.includes('successfully') ? 'var(--success)' : 'var(--danger)', fontSize: '0.85rem', fontWeight: 600, marginBottom: '1rem' }}>
+          <div style={{
+            padding: '0.75rem',
+            borderRadius: 'var(--radius-md)',
+            backgroundColor: isError ? 'var(--danger-bg)' : 'var(--success-bg)',
+            color: isError ? 'var(--danger)' : 'var(--success)',
+            fontSize: '0.85rem',
+            fontWeight: 600,
+            marginBottom: '1rem'
+          }}>
             {msg}
           </div>
         )}
@@ -96,8 +131,8 @@ export default function Profile() {
             />
           </div>
 
-          <button type="submit" className="btn-primary" style={{ marginTop: '0.5rem' }}>
-            Update Password
+          <button type="submit" disabled={loading} className="btn-primary" style={{ marginTop: '0.5rem' }}>
+            {loading ? 'Updating...' : 'Update Password'}
           </button>
         </form>
       </div>

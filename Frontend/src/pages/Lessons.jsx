@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getCourses, getCourseDetails } from '../services/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -11,7 +12,33 @@ export default function Lessons() {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
+  const fetchCourseData = async (courseId) => {
+    setLoading(true);
+    try {
+      const data = await getCourseDetails(courseId);
+      setSelectedCourse(data);
+    } catch (err) {
+      console.warn("Could not load course details, using fallback:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
+ feature/frontend-day4-clean
+    async function loadInitialCourses() {
+      try {
+        const data = await getCourses();
+        const courseList = data.courses || data || [];
+        setCourses(courseList);
+        if (courseList.length > 0) {
+          await fetchCourseData(courseList[0].course_id);
+        } else {
+          setLoading(false);
+        }
+      } catch (err) {
+        console.warn("Could not load courses:", err);
+
     const token = localStorage.getItem('access_token');
     fetch(`${API_BASE_URL}/api/courses`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -84,22 +111,25 @@ export default function Lessons() {
             },
           ],
         });
+ main
         setLoading(false);
-      });
-  };
+      }
+    }
+    loadInitialCourses();
+  }, []);
 
   const handleStartPractice = (lesson) => {
     navigate(`/practice?lesson_id=${lesson.lesson_id}`);
   };
 
   const allLessons = selectedCourse?.modules?.flatMap((m) =>
-    m.lessons.map((l) => ({ ...l, module_name: m.module_name }))
+    m.lessons.map((l) => ({ ...l, module_name: m.module_name || m.title }))
   ) || [];
 
   const filteredLessons = allLessons.filter((l) => {
     const matchesSearch =
       l.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      l.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (l.description && l.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (l.expected_gesture && l.expected_gesture.toLowerCase().includes(searchTerm.toLowerCase()));
 
     const matchesDifficulty =
@@ -144,11 +174,11 @@ export default function Lessons() {
         {courses.map((course) => (
           <button
             key={course.course_id}
-            onClick={() => fetchCourseDetails(course.course_id)}
+            onClick={() => fetchCourseData(course.course_id)}
             className={selectedCourse?.course_id === course.course_id ? "btn-primary" : "btn-secondary"}
             style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}
           >
-            {course.title} ({course.level})
+            {course.title} ({course.level || 'All Levels'})
           </button>
         ))}
       </div>

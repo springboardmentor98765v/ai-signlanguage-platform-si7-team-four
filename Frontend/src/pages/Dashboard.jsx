@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { apiRequest } from '../services/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -12,11 +13,21 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+ feature/frontend-day4-clean
+    async function loadDashboardData() {
+      try {
+        const [dashData, recData] = await Promise.all([
+          apiRequest('/api/analytics/dashboard'),
+          apiRequest('/api/analytics/recommendations'),
+        ]);
+
+
     Promise.all([
       fetch(`${API_BASE_URL}/api/analytics/dashboard`).then((res) => res.json()),
       fetch(`${API_BASE_URL}/api/analytics/recommendations`).then((res) => res.json()),
     ])
       .then(([dashData, recData]) => {
+ main
         setStats(dashData);
         setRecommendations(recData.recommended_lessons || []);
         setAccuracyData([
@@ -32,9 +43,8 @@ export default function Dashboard() {
           { week: 'W3', count: 12 },
           { week: 'W4', count: dashData.lessons_completed || 18 },
         ]);
-        setLoading(false);
-      })
-      .catch(() => {
+      } catch (err) {
+        console.warn('Dashboard analytics unreachable, using default view:', err);
         setStats({
           overall_accuracy_percentage: 91.0,
           lessons_completed: 18,
@@ -57,10 +67,14 @@ export default function Dashboard() {
           { week: 'W2', count: 10 },
           { week: 'W3', count: 18 },
         ]);
+      } finally {
         setLoading(false);
-      });
+      }
+    }
 
-    // Milestone 3 Achievement Badges
+    loadDashboardData();
+
+    // Achievement Badges
     setBadges([
       { id: 1, title: '🔥 7-Day Streak', desc: 'Practiced 7 days in a row', unlocked: true },
       { id: 2, title: '🔤 Alphabet Master', desc: 'Scored >80% on all letters A-Z', unlocked: true },
@@ -106,7 +120,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Milestone 3: Achievements & Badges Grid */}
+      {/* Achievements & Badges Grid */}
       <div className="card" style={{ marginBottom: '1.5rem' }}>
         <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--text-main)' }}>
           Achievement Badges
