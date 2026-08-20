@@ -1,40 +1,33 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { registerUser } from '../services/api';
 
 export default function Register() {
   const [formData, setFormData] = useState({
-    username: 'srilalitha_dev',
-    email: 'student@example.com',
-    password: 'SecurePassword123',
+    username: '',
+    email: '',
+    password: '',
     role: 'Learner',
   });
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleRegister = async (e) => {
     e.preventDefault();
     setError('');
     setMessage('');
+    setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:8000/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setMessage(data.message || 'Account created successfully!');
-        setTimeout(() => navigate('/login'), 1500);
-      } else {
-        setError(data.message || 'Registration failed');
-      }
-    } catch {
-      setMessage('Account created successfully! Redirecting to login...');
+      const data = await registerUser(formData);
+      setMessage(data.message || 'Account created successfully!');
       setTimeout(() => navigate('/login'), 1500);
+    } catch (err) {
+      setError(err.message || 'Registration failed');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -44,8 +37,8 @@ export default function Register() {
         Create Account
       </h2>
 
-      {message && <div className="alert-success">{message}</div>}
-      {error && <div className="alert-error">{error}</div>}
+      {message && <div className="alert-success" style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--success-bg)', color: 'var(--success)', marginBottom: '1rem', fontSize: '0.875rem', textAlign: 'center' }}>{message}</div>}
+      {error && <div className="alert-error" style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--danger-bg)', color: 'var(--danger)', marginBottom: '1rem', fontSize: '0.875rem', textAlign: 'center' }}>{error}</div>}
 
       <form onSubmit={handleRegister}>
         <div className="form-group">
@@ -54,6 +47,7 @@ export default function Register() {
             type="text"
             required
             className="input-control"
+            placeholder="Enter username"
             value={formData.username}
             onChange={(e) => setFormData({ ...formData, username: e.target.value })}
           />
@@ -65,6 +59,7 @@ export default function Register() {
             type="email"
             required
             className="input-control"
+            placeholder="name@example.com"
             value={formData.email}
             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
           />
@@ -76,6 +71,7 @@ export default function Register() {
             type="password"
             required
             className="input-control"
+            placeholder="••••••••"
             value={formData.password}
             onChange={(e) => setFormData({ ...formData, password: e.target.value })}
           />
@@ -94,8 +90,8 @@ export default function Register() {
           </select>
         </div>
 
-        <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '0.5rem', padding: '0.75rem' }}>
-          Create Account
+        <button type="submit" disabled={loading} className="btn-primary" style={{ width: '100%', marginTop: '0.5rem', padding: '0.75rem' }}>
+          {loading ? 'Creating Account...' : 'Create Account'}
         </button>
       </form>
 

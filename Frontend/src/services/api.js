@@ -2,7 +2,7 @@
 // Connects to FastAPI Backend via dynamic URL configuration
 // Includes automatic graceful fallback to offline simulation data when backend is offline.
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const getAuthHeaders = () => {
   const token = localStorage.getItem('access_token');
@@ -156,9 +156,9 @@ export async function loginUser({ email, password }) {
 
 export async function updateUserProfile(profileData) {
   return await fetchWithFallback(
-    `${API_BASE_URL}/api/auth/profile`,
+    `${API_BASE_URL}/api/users/me`,
     {
-      method: 'PUT',
+      method: 'PATCH',
       body: JSON.stringify(profileData),
     },
     {
@@ -170,10 +170,10 @@ export async function updateUserProfile(profileData) {
 
 export async function changePassword({ oldPassword, newPassword }) {
   return await fetchWithFallback(
-    `${API_BASE_URL}/api/auth/change-password`,
+    `${API_BASE_URL}/api/users/change-password`,
     {
       method: 'POST',
-      body: JSON.stringify({ oldPassword, newPassword }),
+      body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
     },
     {
       message: 'Password changed successfully',
@@ -221,6 +221,24 @@ export async function getCourses() {
   );
 }
 
+export async function getCourseModules() {
+  return await fetchWithFallback(
+    `${API_BASE_URL}/api/courses/modules`,
+    { method: 'GET' },
+    [
+      {
+        module_id: 'mod_alph_01',
+        title: 'Static Handshapes (A-E)',
+        lessons: [
+          { lesson_id: 'les_letter_a', title: "Letter 'A'", expected_gesture: 'A' },
+          { lesson_id: 'les_letter_b', title: "Letter 'B'", expected_gesture: 'B' },
+          { lesson_id: 'les_letter_c', title: "Letter 'C'", expected_gesture: 'C' },
+        ],
+      },
+    ]
+  );
+}
+
 export async function getCourseDetails(courseId) {
   return await fetchWithFallback(
     `${API_BASE_URL}/api/courses/${courseId}`,
@@ -251,7 +269,7 @@ export async function getCourseDetails(courseId) {
             {
               lesson_id: 'les_letter_c',
               title: "The Alphabet Letter 'C'",
-              description: 'Form a open curved shape with fingers and thumb resembling the letter C.',
+              description: 'Form an open curved shape with fingers and thumb resembling the letter C.',
               expected_gesture: 'C',
               difficulty: 'Easy',
             },
@@ -305,6 +323,21 @@ export async function submitPracticeGesture({ userId, lessonId, targetLetter, im
   );
 }
 
+export async function evaluateSignDay3({ sign, image_base64 }) {
+  return await fetchWithFallback(
+    `${API_BASE_URL}/api/v1/day3/evaluate-sign`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ sign, image_base64 }),
+    },
+    {
+      predicted_sign: sign,
+      is_correct: true,
+      confidence: 95.5,
+    }
+  );
+}
+
 export async function startPracticeSession(lessonId) {
   return await fetchWithFallback(
     `${API_BASE_URL}/api/practice/start`,
@@ -320,131 +353,49 @@ export async function startPracticeSession(lessonId) {
   );
 }
 
-export async function processWebcamFrame(sessionId, base64FrameData) {
+export async function endPracticeSession(sessionId) {
   return await fetchWithFallback(
-    `${API_BASE_URL}/api/practice/process-frame`,
+    `${API_BASE_URL}/api/practice/end`,
     {
       method: 'POST',
-      body: JSON.stringify({
-        session_id: sessionId,
-        frame_data: base64FrameData,
-      }),
+      body: JSON.stringify({ session_id: sessionId }),
     },
     {
-      session_id: sessionId,
-      predicted_sign: 'A',
-      confidence: 96.4,
+      message: 'Practice session ended successfully',
     }
   );
 }
 
 // -------------------------------------------------------------------
-// 4) Assessment & Feedback Service Endpoints
+// 4) Accessibility Trainer APIs (Day 2 & Day 3)
 // -------------------------------------------------------------------
 
-export async function evaluateAssessment({ sessionId, expectedGesture, predictedGesture, confidence }) {
+export async function getTrainerLearners() {
   return await fetchWithFallback(
-    `${API_BASE_URL}/api/assessment/evaluate`,
-    {
-      method: 'POST',
-      body: JSON.stringify({
-        session_id: sessionId,
-        expected_gesture: expectedGesture,
-        predicted_gesture: predictedGesture || expectedGesture,
-        confidence: confidence || 95.0,
-      }),
-    },
-    () => {
-      const isMatch = expectedGesture === (predictedGesture || expectedGesture);
-      const accScore = isMatch ? Math.floor(Math.random() * 15) + 85 : Math.floor(Math.random() * 30) + 40;
-      
-      return {
-        assessment_id: `asm_${Date.now()}`,
-        overall_accuracy: accScore,
-        metrics: {
-          hand_shape_score: Math.min(100, accScore + 3),
-          finger_position_score: Math.max(60, accScore - 2),
-          timing_score: 90.0,
-        },
-        feedback: {
-          is_correct: accScore >= 75,
-          suggestions: accScore >= 75
-            ? ['Excellent hand posture! Your joint alignment is well centered.']
-            : [
-                'Keep your thumb closer alongside your outer palm.',
-                'Ensure all fingers are fully extended towards the top of the camera frame.',
-              ],
-        },
-        possible_issue: accScore >= 75 ? null : 'Thumb position is tucked slightly too tight inward.',
-      };
-    }
+    `${API_BASE_URL}/api/trainer/learners`,
+    { method: 'GET' },
+    [
+      { learner_id: 'usr_1', name: 'Aarav Patel', level: 'Intermediate', progress: 82, accuracy: 89, certification_status: 'Certified' },
+      { learner_id: 'usr_2', name: 'Ananya Sharma', level: 'Beginner', progress: 45, accuracy: 74, certification_status: 'In Assessment' },
+      { learner_id: 'usr_3', name: 'Rohan Gupta', level: 'Advanced', progress: 95, accuracy: 96, certification_status: 'Certified' },
+      { learner_id: 'usr_4', name: 'Meera Nair', level: 'Beginner', progress: 30, accuracy: 62, certification_status: 'Needs Support' },
+    ]
   );
 }
 
-// -------------------------------------------------------------------
-// 5) Analytics & Dashboard Endpoints
-// -------------------------------------------------------------------
-
-export async function getDashboardAnalytics() {
+export async function getLearnerTrainerDetail(learnerId, metricType) {
+  // metricType: 'engagement' | 'skill-development' | 'assessment-analytics' | 'certification-status'
   return await fetchWithFallback(
-    `${API_BASE_URL}/api/analytics/dashboard`,
+    `${API_BASE_URL}/api/trainer/learners/${learnerId}/${metricType}`,
     { method: 'GET' },
     {
-      user_id: 'usr_78910',
-      overall_accuracy_percentage: 91.0,
-      lessons_completed: 18,
-      practice_hours: 24.5,
-      improvement_rate_percentage: 12.0,
-      streak_days: 7,
-      accuracy_over_time: [
-        { date: 'Mon', accuracy: 68 },
-        { date: 'Tue', accuracy: 75 },
-        { date: 'Wed', accuracy: 82 },
-        { date: 'Thu', accuracy: 88 },
-        { date: 'Fri', accuracy: 91 },
-        { date: 'Sat', accuracy: 94 },
-      ],
-      completion_by_category: [
-        { category: 'Alphabet (A-Z)', completed: 18, total: 26 },
-        { category: 'Numbers (1-10)', completed: 8, total: 10 },
-        { category: 'Conversational', completed: 4, total: 12 },
-      ],
+      learner_id: learnerId,
+      metric: metricType,
+      value: 88,
+      status: 'Normal',
     }
   );
 }
-
-export async function getRecommendations() {
-  return await fetchWithFallback(
-    `${API_BASE_URL}/api/analytics/recommendations`,
-    { method: 'GET' },
-    {
-      recommended_lessons: [
-        {
-          lesson_id: 'les_letter_m',
-          title: "Letter 'M' Practice",
-          reason: 'Thumb position accuracy fell below 75% in your last 3 attempts.',
-          expected_gesture: 'M',
-        },
-        {
-          lesson_id: 'les_letter_n',
-          title: "Letter 'N' Practice",
-          reason: 'Identified as a core weak area this week.',
-          expected_gesture: 'N',
-        },
-        {
-          lesson_id: 'les_letter_z',
-          title: "Letter 'Z' Practice",
-          reason: 'Dynamic finger motion requires extra timing refinement.',
-          expected_gesture: 'Z',
-        },
-      ],
-    }
-  );
-}
-
-// -------------------------------------------------------------------
-// 6) Accessibility Trainer APIs (Day 2 & Day 3)
-// -------------------------------------------------------------------
 
 export async function getAccessibilityTrainerAnalytics() {
   return await fetchWithFallback(
@@ -474,7 +425,7 @@ export async function getAccessibilityTrainerAnalytics() {
 }
 
 // -------------------------------------------------------------------
-// 7) Certification & Reports Export APIs (Day 3)
+// 5) Certification & Reports Export APIs (Day 3)
 // -------------------------------------------------------------------
 
 export async function downloadCertificatePDF(examId = 1) {
@@ -493,7 +444,7 @@ export async function exportReportFile(reportType, format = 'pdf') {
 }
 
 // -------------------------------------------------------------------
-// 8) Admin & Instructor APIs
+// 6) Admin & Instructor APIs
 // -------------------------------------------------------------------
 
 export async function getAllUsers() {
@@ -512,10 +463,10 @@ export async function getAllUsers() {
 
 export async function toggleUserStatus(userId, currentStatus) {
   return await fetchWithFallback(
-    `${API_BASE_URL}/api/admin/users/${userId}/status`,
+    `${API_BASE_URL}/api/admin/user-status`,
     {
       method: 'PATCH',
-      body: JSON.stringify({ active: !currentStatus }),
+      body: JSON.stringify({ user_id: userId, active: !currentStatus }),
     },
     {
       message: `User status updated to ${!currentStatus ? 'Active' : 'Inactive'}`,
@@ -523,9 +474,9 @@ export async function toggleUserStatus(userId, currentStatus) {
   );
 }
 
-export async function getInstructorStudents() {
+export async function getInstructorStudents(instructorEmail = 'instructor@platform.org') {
   return await fetchWithFallback(
-    `${API_BASE_URL}/api/instructor/students`,
+    `${API_BASE_URL}/api/instructor/students/${encodeURIComponent(instructorEmail)}`,
     { method: 'GET' },
     [
       { id: 'usr_1', name: 'Alex Johnson', email: 'alex@example.com', accuracy: 88, completedLessons: 14, weakLetters: ['Z', 'J'], streak: 4 },

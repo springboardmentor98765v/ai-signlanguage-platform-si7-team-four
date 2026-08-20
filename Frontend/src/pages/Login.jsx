@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { loginUser } from '../services/api';
 
 export default function Login({ setUser }) {
   const [email, setEmail] = useState('student@example.com');
@@ -29,33 +28,21 @@ export default function Login({ setUser }) {
     setError('');
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
+      const data = await loginUser({ email, password });
 
-      const data = await response.json();
-
-      if (response.ok) {
-        localStorage.setItem('access_token', data.access_token);
-        localStorage.setItem('user', JSON.stringify(data.user));
-        if (setUser) setUser(data.user);
-        routeByUserRole(data.user?.role || selectedRole);
-      } else {
-        setError(data.message || data.detail || 'Invalid credentials');
-      }
-    } catch {
-      // Graceful offline fallback during development and testing
-      const userData = {
+      const token = data.access_token || 'mock_bearer_token';
+      const currentUser = data.user || {
         username: email.split('@')[0],
         role: selectedRole,
         email,
       };
-      localStorage.setItem('access_token', 'mock_bearer_token');
-      localStorage.setItem('user', JSON.stringify(userData));
-      if (setUser) setUser(userData);
-      routeByUserRole(selectedRole);
+
+      localStorage.setItem('access_token', token);
+      localStorage.setItem('user', JSON.stringify(currentUser));
+      if (setUser) setUser(currentUser);
+      routeByUserRole(currentUser.role || selectedRole);
+    } catch (err) {
+      setError(err.message || 'Invalid credentials. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -82,7 +69,20 @@ export default function Login({ setUser }) {
         Login to Account
       </h2>
 
-      {error && <div className="alert-error" style={{ marginBottom: '1rem' }}>{error}</div>}
+      {error && (
+        <div style={{
+          padding: '0.75rem',
+          borderRadius: 'var(--radius-md)',
+          backgroundColor: 'var(--danger-bg)',
+          color: 'var(--danger)',
+          fontSize: '0.85rem',
+          fontWeight: 600,
+          marginBottom: '1rem',
+          textAlign: 'center'
+        }}>
+          {error}
+        </div>
+      )}
 
       <form onSubmit={handleLogin}>
         <div className="form-group">

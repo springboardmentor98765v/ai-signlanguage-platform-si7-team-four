@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { submitPracticeGesture, startPracticeSession, endPracticeSession } from '../services/api';
 
 // ============================================================================
 // Reusable Spring-Bounce Popup Modal Component
@@ -46,7 +47,8 @@ export default function Practice() {
   const [maxAttempts] = useState(5);
   const [timeLeft, setTimeLeft] = useState(30);
   const [isTimerActive, setIsTimerActive] = useState(false);
-  const [streakCount, setStreakCount] = useState(7);
+  const [streakCount] = useState(7);
+  const [sessionId, setSessionId] = useState('sess_112233');
   
   // AI Diagnostics State
   const [loading, setLoading] = useState(false);
@@ -101,6 +103,14 @@ export default function Practice() {
       setIsCameraOn(true);
       setTimeLeft(30);
       setIsTimerActive(true);
+
+      // Start backend practice session
+      try {
+        const sessionRes = await startPracticeSession(1);
+        if (sessionRes?.session_id) {
+          setSessionId(sessionRes.session_id);
+        }
+      } catch (_) {}
     } catch (err) {
       setErrorMsg('Webcam access denied or camera not found. Operating in fallback simulation mode.');
       setIsCameraOn(false);
@@ -116,6 +126,9 @@ export default function Practice() {
     }
     setIsCameraOn(false);
     setIsTimerActive(false);
+    try {
+      endPracticeSession(sessionId);
+    } catch (_) {}
   };
 
   useEffect(() => {
@@ -145,32 +158,18 @@ export default function Practice() {
     }
 
     // Retrieve active User & Lesson IDs from LocalStorage
-    const user = JSON.parse(localStorage.getItem('user'));
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
     const userId = user?.id || user?.user_id || 1;
     const lessonId = 1;
 
     try {
-      // UPDATED ENDPOINT: /api/practice/submit
-      const response = await fetch('http://localhost:8000/api/practice/submit', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
-        },
-        body: JSON.stringify({
-          user_id: userId,
-          lesson_id: lessonId,
-          target_letter: selectedLetter,
-          image_data: base64Image,
-        }),
+      const data = await submitPracticeGesture({
+        userId,
+        lessonId,
+        targetLetter: selectedLetter,
+        imageData: base64Image,
       });
 
-      if (!response.ok) {
-        throw new Error(`Server returned ${response.status}`);
-      }
-
-      const data = await response.json();
-      
       // Parse output gracefully across mock schema and real AI service schema
       const predicted = data.predicted_sign || data.metrics?.predicted_sign || selectedLetter;
       
@@ -194,7 +193,7 @@ export default function Practice() {
       });
 
       setMetrics({
-        handShape: data.metrics?.hand_shape_match || data.metrics?.hand_shape || (confScore > 80 ? 92 : 60),
+        handShape: data.metrics?.hand_shape || data.metrics?.hand_shape_match || (confScore > 80 ? 92 : 60),
         fingerPosition: data.metrics?.finger_position || (confScore > 80 ? 88 : 55),
         timingAlignment: data.metrics?.timing || 90,
       });
@@ -207,52 +206,46 @@ export default function Practice() {
         });
         setShowPopup(true);
       }
-
     } catch (err) {
       console.warn("Backend connection issue, running local simulation fallback:", err);
 
-      // Fallback Simulation Engine if backend service is unreachable
-      setTimeout(() => {
-        const isCorrect = Math.random() > 0.25;
-        const confidenceScore = isCorrect
-          ? Math.floor(Math.random() * 12) + 86
-          : Math.floor(Math.random() * 35) + 35;
+      const isCorrect = Math.random() > 0.25;
+      const confidenceScore = isCorrect
+        ? Math.floor(Math.random() * 12) + 86
+        : Math.floor(Math.random() * 35) + 35;
 
-        const activeSet = selectedCategory === 'alphabets' ? alphabet : numbers;
-        const predicted = isCorrect
-          ? selectedLetter
-          : activeSet[Math.floor(Math.random() * activeSet.length)];
+      const activeSet = selectedCategory === 'alphabets' ? alphabet : numbers;
+      const predicted = isCorrect
+        ? selectedLetter
+        : activeSet[Math.floor(Math.random() * activeSet.length)];
 
-        const feedbackMsg = isCorrect
-          ? `Excellent execution for '${selectedLetter}'! Finger positioning and palm angle align with target standards.`
-          : `Detected sign '${predicted}'. Try adjusting your thumb angle and keep your knuckles level with the lens.`;
+      const feedbackMsg = isCorrect
+        ? `Excellent execution for '${selectedLetter}'! Finger positioning and palm angle align with target standards.`
+        : `Detected sign '${predicted}'. Try adjusting your thumb angle and keep your knuckles level with the lens.`;
 
-        setPrediction({
-          predicted_sign: predicted,
-          confidence: confidenceScore,
-          feedback: feedbackMsg,
+      setPrediction({
+        predicted_sign: predicted,
+        confidence: confidenceScore,
+        feedback: feedbackMsg,
+      });
+
+      setMetrics({
+        handShape: isCorrect ? Math.floor(Math.random() * 10) + 90 : Math.floor(Math.random() * 30) + 40,
+        fingerPosition: isCorrect ? Math.floor(Math.random() * 12) + 85 : Math.floor(Math.random() * 30) + 45,
+        timingAlignment: isCorrect ? Math.floor(Math.random() * 10) + 88 : Math.floor(Math.random() * 25) + 50,
+      });
+
+      if (confidenceScore > 85) {
+        setModalData({
+          title: 'High Accuracy Achieved!',
+          message: `Incredible precision! You matched Sign '${selectedLetter}' with ${confidenceScore}% confidence.`,
+          icon: '🏆'
         });
-
-        setMetrics({
-          handShape: isCorrect ? Math.floor(Math.random() * 10) + 90 : Math.floor(Math.random() * 30) + 40,
-          fingerPosition: isCorrect ? Math.floor(Math.random() * 12) + 85 : Math.floor(Math.random() * 30) + 45,
-          timingAlignment: isCorrect ? Math.floor(Math.random() * 10) + 88 : Math.floor(Math.random() * 25) + 50,
-        });
-
-        if (confidenceScore > 85) {
-          setModalData({
-            title: 'High Accuracy Achieved!',
-            message: `Incredible precision! You matched Sign '${selectedLetter}' with ${confidenceScore}% confidence.`,
-            icon: '🏆'
-          });
-          setShowPopup(true);
-        }
-      }, 600);
+        setShowPopup(true);
+      }
     } finally {
-      setTimeout(() => {
-        setLoading(false);
-        setAttemptCount((prev) => (prev >= maxAttempts ? 1 : prev + 1));
-      }, 600);
+      setLoading(false);
+      setAttemptCount((prev) => (prev >= maxAttempts ? 1 : prev + 1));
     }
   };
 
@@ -288,7 +281,7 @@ export default function Practice() {
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
           <span className="streak-pill">🔥 {streakCount} Day Practice Streak</span>
-          <span className="badge badge-primary">Session ID: sess_112233</span>
+          <span className="badge badge-primary">Session ID: {sessionId}</span>
           <button onClick={resetSession} className="btn-secondary" style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}>
             🔄 Reset Session
           </button>
