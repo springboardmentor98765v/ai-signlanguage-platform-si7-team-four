@@ -260,7 +260,7 @@ def test_courses_service():
     assert len(modules.json()) > 0
     assert "course_id" in modules.json()[0]
 
-    lessons = client.get(f"/api/courses/modules/{MODULE_ID}/lessons")
+    lessons = client.get(f"/api/courses/modules/{modules.json()[0]['module_id']}/lessons")
     assert lessons.status_code == 200
     assert len(lessons.json()) > 0
     assert "lesson_id" in lessons.json()[0]

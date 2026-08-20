@@ -12,6 +12,49 @@ load_dotenv()
 
 SECRET_KEY = os.getenv("SECRET_KEY", "fallback_secret_key")
 
+
+def _apply_sqlite_schema_migrations():
+    """
+    Idempotent dev-only migrations for the local SQLite file (app_data.db).
+
+    create_all() adds new tables but not new columns to existing tables, so
+    columns added after the DB file already exists need an explicit ALTER TABLE.
+
+    Must run BEFORE the routers are imported: the course router seeds the
+    alphabet module/lessons into the DB at import time and needs the columns
+    below to already exist.
+    """
+    import sqlite3
+    from pathlib import Path
+
+    # Resolve relative to the package (Backend/), not the process CWD, so the
+    # migration always targets the backend's own app_data.db.
+    db_path = Path(__file__).resolve().parent.parent / "app_data.db"
+    try:
+        with sqlite3.connect(db_path) as conn:
+            user_cols = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
+            if "instructor_id" not in user_cols:
+                conn.execute("ALTER TABLE users ADD COLUMN instructor_id VARCHAR(36)")
+
+            module_cols = {row[1] for row in conn.execute("PRAGMA table_info(modules)")}
+            if "description" not in module_cols:
+                conn.execute("ALTER TABLE modules ADD COLUMN description TEXT")
+            if "created_at" not in module_cols:
+                conn.execute("ALTER TABLE modules ADD COLUMN created_at DATETIME")
+    except Exception:
+        pass
+
+
+_apply_sqlite_schema_migrations()
+
+# Ensure all database tables exist BEFORE routers are imported. The course
+# router seeds the alphabet module/lessons at import time and queries the
+# "modules" table, so create_all() must run first or startup crashes with
+# "relation modules does not exist" on a fresh database.
+from app.db.database import engine, Base
+from app.models import models
+Base.metadata.create_all(bind=engine)
+
 # Import all project routers
 from app.routers.profile_router import router as profile_router
 from app.routers.gesture_router import router as gesture_router
@@ -25,36 +68,7 @@ from app.routers.admin_router import router as admin_router
 from app.routers.instructor_router import router as instructor_router
 from app.routers.notification_router import router as notification_router
 from app.routers import auth, course, practice, trainer_router
-from app.db.database import engine, Base
-from app.models import models
 
-# Ensure all database tables exist on startup
-Base.metadata.create_all(bind=engine)
-
-
-def _apply_sqlite_schema_migrations():
-    """
-    Idempotent dev-only migrations for the local SQLite file (app_data.db).
-
-    create_all() adds new tables but not new columns to existing tables, so
-    columns added after the DB file already exists need an explicit ALTER TABLE.
-    """
-    import sqlite3
-    from pathlib import Path
-
-    # Resolve relative to the package (Backend/), not the process CWD, so the
-    # migration always targets the backend's own app_data.db.
-    db_path = Path(__file__).resolve().parent.parent / "app_data.db"
-    try:
-        with sqlite3.connect(db_path) as conn:
-            cols = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
-            if "instructor_id" not in cols:
-                conn.execute("ALTER TABLE users ADD COLUMN instructor_id VARCHAR(36)")
-    except Exception:
-        pass
-
-
-_apply_sqlite_schema_migrations()
 
 app = FastAPI(
     title="AI Sign Language Platform API",

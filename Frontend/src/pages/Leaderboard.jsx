@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../services/api';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 export default function Leaderboard() {
   const [sortMetric, setSortMetric] = useState('accuracy'); // 'accuracy' or 'streak'
   const [learners, setLearners] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+ feature/frontend-day4-clean
     async function loadLeaderboard() {
       setLoading(true);
       const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
@@ -21,6 +24,15 @@ export default function Leaderboard() {
         setLearners(formatted);
       } catch (err) {
         console.warn('Leaderboard endpoint unreachable, using fallback dataset:', err);
+
+    fetch(`${API_BASE_URL}/api/analytics/leaderboard?sort=${sortMetric}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setLearners(data);
+        setLoading(false);
+      })
+      .catch(() => {
+ main
         setLearners([
           { rank: 1, name: 'Beatriz Smith', accuracy: 96, streak: 14, isUser: false },
           { rank: 2, name: currentUserName, accuracy: 91, streak: 7, isUser: true },

@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.models.models import TrainerLearnerLink, User
+from app.models.models import AccessibilityTrainerLearner, User
 from app.services import trainer_service
 from app.schemas.trainer import (
     TrainerLearnerSummary,
@@ -60,7 +60,7 @@ def _get_assigned_learner(db: Session, trainer_id: str, learner_id: str) -> User
     summary="Get My Assigned Learners",
     description=(
         "Accessibility Trainer only. Returns every learner assigned to the "
-        "logged-in trainer via the trainer_learner_links table."
+        "logged-in trainer via the accessibility_trainer_learner table."
     ),
 )
 def get_my_learners(
@@ -105,15 +105,15 @@ def assign_learner(
         raise HTTPException(status_code=400, detail="A trainer cannot assign themself.")
 
     existing = (
-        db.query(TrainerLearnerLink)
+        db.query(AccessibilityTrainerLearner)
         .filter(
-            TrainerLearnerLink.trainer_id == token_data["user_id"],
-            TrainerLearnerLink.learner_id == learner.id,
+            AccessibilityTrainerLearner.trainer_id == token_data["user_id"],
+            AccessibilityTrainerLearner.learner_id == learner.id,
         )
         .first()
     )
     if existing is None:
-        db.add(TrainerLearnerLink(trainer_id=token_data["user_id"], learner_id=learner.id))
+        db.add(AccessibilityTrainerLearner(trainer_id=token_data["user_id"], learner_id=learner.id))
         db.commit()
 
     return {

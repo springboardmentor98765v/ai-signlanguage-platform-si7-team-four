@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { apiRequest } from '../services/api';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
@@ -11,6 +13,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+ feature/frontend-day4-clean
     async function loadDashboardData() {
       try {
         const [dashData, recData] = await Promise.all([
@@ -18,6 +21,13 @@ export default function Dashboard() {
           apiRequest('/api/analytics/recommendations'),
         ]);
 
+
+    Promise.all([
+      fetch(`${API_BASE_URL}/api/analytics/dashboard`).then((res) => res.json()),
+      fetch(`${API_BASE_URL}/api/analytics/recommendations`).then((res) => res.json()),
+    ])
+      .then(([dashData, recData]) => {
+ main
         setStats(dashData);
         setRecommendations(recData.recommended_lessons || []);
         setAccuracyData([

@@ -54,7 +54,8 @@ def test_course_seeding_and_retrieval_flow():
     
     # Assert that our automatic database seed initialized correctly
     assert len(data) > 0
-    assert data[0]["module_id"] == "mod_alphabet_101"
+    assert data[0]["module_id"]
+    assert data[0]["title"] == "American Sign Language: Alphabets"
     # Ensure all 26 default alphabet letters generated smoothly
     assert len(data[0]["lessons"]) == 26
 

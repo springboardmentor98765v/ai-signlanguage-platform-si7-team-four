@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { submitPracticeGesture, startPracticeSession, endPracticeSession } from '../services/api';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 // ============================================================================
 // Reusable Spring-Bounce Popup Modal Component
 // ============================================================================
@@ -140,28 +142,28 @@ export default function Practice() {
   // --------------------------------------------------------------------------
   // Frame Processing & AI Prediction Call
   // --------------------------------------------------------------------------
+  const grabFrame = () => {
+    if (!isCameraOn || !videoRef.current || !canvasRef.current) return null;
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', 0.9);
+  };
+
   const handleCaptureAndTest = async () => {
     setLoading(true);
     setPrediction(null);
     setErrorMsg('');
-
-    let base64Image = null;
-
-    if (isCameraOn && videoRef.current && canvasRef.current) {
-      const canvas = canvasRef.current;
-      const video = videoRef.current;
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      base64Image = canvas.toDataURL('image/jpeg', 0.8);
-    }
 
     // Retrieve active User & Lesson IDs from LocalStorage
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     const userId = user?.id || user?.user_id || 1;
     const lessonId = 1;
 
+ feature/frontend-day4-clean
     try {
       const data = await submitPracticeGesture({
         userId,
@@ -178,20 +180,40 @@ export default function Practice() {
         confScore = data.confidence <= 1 ? Math.round(data.confidence * 100) : Math.round(data.confidence);
       } else if (data.metrics?.confidence_percentage) {
         confScore = Math.round(data.metrics.confidence_percentage);
+
+    const finish = () => {
+      setLoading(false);
+      setAttemptCount((prev) => (prev >= maxAttempts ? 1 : prev + 1));
+    };
+
+    // Try up to 3 fresh frames before giving up on hand detection —
+    // a single glance often catches the hand mid-move or out of focus.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 400));
+
+      const base64Image = grabFrame();
+      if (!base64Image) {
+        setErrorMsg('Camera is not ready. Turn the camera on first.');
+        break;
+ main
       }
 
-      const feedbackText = data.possible_issue 
-        || data.feedback 
-        || (data.correct !== false 
-            ? `Great job! Hand posture matches target '${selectedLetter}' accurately.` 
-            : `Keep practicing sign '${selectedLetter}'! Adjust your finger alignment.`);
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/practice/submit`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
+          },
+          body: JSON.stringify({
+            user_id: userId,
+            lesson_id: lessonId,
+            target_letter: selectedLetter,
+            image_data: base64Image,
+          }),
+        });
 
-      setPrediction({
-        predicted_sign: predicted,
-        confidence: confScore,
-        feedback: feedbackText,
-      });
-
+ feature/frontend-day4-clean
       setMetrics({
         handShape: data.metrics?.hand_shape || data.metrics?.hand_shape_match || (confScore > 80 ? 92 : 60),
         fingerPosition: data.metrics?.finger_position || (confScore > 80 ? 88 : 55),
@@ -246,7 +268,113 @@ export default function Practice() {
     } finally {
       setLoading(false);
       setAttemptCount((prev) => (prev >= maxAttempts ? 1 : prev + 1));
+
+        if (!response.ok) {
+          throw new Error(`Server returned ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        const handDetected = data.hand_detected !== false;
+        const predicted = data.predicted_sign || data.metrics?.predicted_sign || null;
+
+        // Hand didn't register on this frame — retry with a fresher one.
+        if (!handDetected || !predicted) continue;
+
+        let confScore = 0;
+        if (typeof data.confidence === 'number') {
+          confScore = data.confidence <= 1 ? Math.round(data.confidence * 100) : Math.round(data.confidence);
+        } else if (data.metrics?.confidence_percentage) {
+          confScore = Math.round(data.metrics.confidence_percentage);
+        }
+
+        const feedbackText = data.possible_issue
+          || data.feedback
+          || (data.correct === true
+              ? `Great job! Hand posture matches target '${selectedLetter}' accurately.`
+              : data.correct === false
+                  ? `Keep practicing sign '${selectedLetter}'! Adjust your finger alignment.`
+                  : `Detected sign '${predicted}'. Show sign '${selectedLetter}' for a match.`);
+
+        setPrediction({
+          predicted_sign: predicted,
+          confidence: confScore,
+          feedback: feedbackText,
+        });
+
+        const baseline = confScore > 80 ? 92 : 60;
+        setMetrics({
+          handShape: data.metrics?.hand_shape_match || data.metrics?.hand_shape || baseline,
+          fingerPosition: data.metrics?.finger_position || (confScore > 80 ? 88 : 55),
+          timingAlignment: data.metrics?.timing || 90,
+        });
+
+        if (confScore > 80) {
+          setModalData({
+            title: 'High Accuracy Achieved!',
+            message: `Incredible precision! You matched Sign '${selectedLetter}' with ${confScore}% confidence.`,
+            icon: '🏆'
+          });
+          setShowPopup(true);
+        }
+        finish();
+        return;
+
+      } catch (err) {
+        console.warn("Backend connection issue, running local simulation fallback:", err);
+
+        // Fallback Simulation Engine if backend service is unreachable
+        setTimeout(() => {
+          const isCorrect = Math.random() > 0.25;
+          const confidenceScore = isCorrect
+            ? Math.floor(Math.random() * 12) + 86
+            : Math.floor(Math.random() * 35) + 35;
+
+          const activeSet = selectedCategory === 'alphabets' ? alphabet : numbers;
+          const predicted = isCorrect
+            ? selectedLetter
+            : activeSet[Math.floor(Math.random() * activeSet.length)];
+
+          const feedbackMsg = isCorrect
+            ? `Excellent execution for '${selectedLetter}'! Finger positioning and palm angle align with target standards.`
+            : `Detected sign '${predicted}'. Try adjusting your thumb angle and keep your knuckles level with the lens.`;
+
+          setPrediction({
+            predicted_sign: predicted,
+            confidence: confidenceScore,
+            feedback: feedbackMsg,
+          });
+
+          setMetrics({
+            handShape: isCorrect ? Math.floor(Math.random() * 10) + 90 : Math.floor(Math.random() * 30) + 40,
+            fingerPosition: isCorrect ? Math.floor(Math.random() * 12) + 85 : Math.floor(Math.random() * 30) + 45,
+            timingAlignment: isCorrect ? Math.floor(Math.random() * 10) + 88 : Math.floor(Math.random() * 25) + 50,
+          });
+
+          if (confidenceScore > 85) {
+            setModalData({
+              title: 'High Accuracy Achieved!',
+              message: `Incredible precision! You matched Sign '${selectedLetter}' with ${confidenceScore}% confidence.`,
+              icon: '🏆'
+            });
+            setShowPopup(true);
+          }
+        }, 600);
+        finish();
+        return;
+      }
+ main
     }
+
+    // Every frame came back without a detectable hand — be honest about it.
+    setPrediction({
+      predicted_sign: null,
+      confidence: 0,
+      feedback: 'No hand detected. Keep your hand fully in frame with good lighting, close to the camera, then try again.',
+    });
+    setMetrics({ handShape: 0, fingerPosition: 0, timingAlignment: 0 });
+    setErrorMsg('No hand detected');
+    finish();
   };
 
   const resetSession = () => {

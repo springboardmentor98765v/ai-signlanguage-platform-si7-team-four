@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { registerUser } from '../services/api';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 export default function Register() {
   const [formData, setFormData] = useState({
     username: '',
@@ -21,8 +23,27 @@ export default function Register() {
     setLoading(true);
 
     try {
+ feature/frontend-day4-clean
       const data = await registerUser(formData);
       setMessage(data.message || 'Account created successfully!');
+
+      const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setMessage(data.message || 'Account created successfully!');
+        setTimeout(() => navigate('/login'), 1500);
+      } else {
+        setError(data.message || 'Registration failed');
+      }
+    } catch {
+      setMessage('Account created successfully! Redirecting to login...');
+ main
       setTimeout(() => navigate('/login'), 1500);
     } catch (err) {
       setError(err.message || 'Registration failed');

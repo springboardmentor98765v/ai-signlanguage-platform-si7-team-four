@@ -12,18 +12,33 @@ services:
     container_name: signlang-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: signlang
-      POSTGRES_PASSWORD: signlang_dev_pw
-      POSTGRES_DB: signlang_db
+      POSTGRES_USER: ${POSTGRES_USER:-signlang}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-signlang_dev_pw}
+      POSTGRES_DB: ${POSTGRES_DB:-signlang_db}
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
       - signlang_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U signlang -d signlang_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-signlang} -d ${POSTGRES_DB:-signlang_db}"]
       interval: 5s
       timeout: 5s
       retries: 5
+
+  ai-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.ai
+    container_name: signlang-ai
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8001:8001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=5)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   backend:
     build:
@@ -36,9 +51,7 @@ services:
     # backend must reach the `postgres` service over the compose network, so the
     # DB persists via the named `signlang_pgdata` volume below.
     environment:
-      DATABASE_URL: postgresql+psycopg2://signlang:signlang_dev_pw@postgres:5432/signlang_db
-      # Secret from the repo-root .env (or shell) for docker compose runs;
-      # real deployments must set SECRET_KEY to a long random value.
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://signlang:signlang_dev_pw@postgres:5432/signlang_db}
       SECRET_KEY: ${SECRET_KEY:-signlang_compose_dev_secret_change_me}
       JWT_SECRET: ${JWT_SECRET:-}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
@@ -52,6 +65,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      ai-service:
+        condition: service_healthy
     healthcheck:
       test:
         - CMD
@@ -62,15 +77,6 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
-
-  ai-service:
-    build:
-      context: .
-      dockerfile: Dockerfile.ai
-    container_name: signlang-ai
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:8001:8001"
 
 volumes:
   signlang_pgdata:
