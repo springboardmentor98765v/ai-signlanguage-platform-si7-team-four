@@ -3,11 +3,13 @@
 // All functions call the real backend and throw on any failure — there is
 // no offline/mock fallback data anywhere in this module.
 
-// VITE_API_URL always wins. In local dev we default to the local backend;
-// production builds default to the deployed Render backend.
+// VITE_API_URL always wins. In local dev we default to same-origin (the Vite
+// dev server proxies /api to the local backend), so the site works even when
+// the browser cannot resolve external hosts; production builds default to the
+// deployed Render backend.
 export const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
-  (import.meta.env.DEV ? 'http://localhost:8000' : 'https://signlang-backend-6epi.onrender.com');
+  (import.meta.env.DEV ? '' : 'https://signlang-backend-6epi.onrender.com');
 
 const getAuthHeaders = (extra = {}) => {
   const token = localStorage.getItem('access_token');
