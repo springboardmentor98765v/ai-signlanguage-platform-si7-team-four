@@ -54,6 +54,109 @@ def _get_assigned_learner(db: Session, trainer_id: str, learner_id: str) -> User
 
 
 @router.get(
+    "/analytics",
+    status_code=status.HTTP_200_OK,
+    summary="Get Trainer Dashboard Analytics",
+    description=(
+        "Accessibility Trainer only. Aggregate dashboard metrics computed live "
+        "from the trainer's assigned learners: counts, average accuracy, "
+        "certifications issued, per-learner rows and per-skill breakdown."
+    ),
+)
+def get_trainer_analytics(
+    token_data: dict = Depends(verify_token_and_role([TRAINER_ROLE])),
+    db: Session = Depends(get_db),
+):
+    from datetime import timedelta as _td
+    from app.models.models import Assessment, Certificate, PracticeSession as _PS, User as _U
+    from sqlalchemy import func as _f
+
+    trainer_id = str(token_data["user_id"])
+    links = trainer_service.assigned_learners(db, trainer_id)
+    learner_ids = [str(row["learner_id"]) for row in links]
+
+    assigned_count = len(learner_ids)
+    active_this_week = 0
+    all_accuracies: list[float] = []
+    by_letter: dict[str, list[float]] = {}
+    learners_rows = []
+    certifications_issued = 0
+
+    week_ago = datetime.utcnow() - _td(days=7)
+
+    cert_count_by_user = {}
+    if learner_ids:
+        cert_query = (
+            db.query(Certificate.user_id, _f.count(Certificate.id))
+            .filter(Certificate.user_id.in_(learner_ids))
+            .group_by(Certificate.user_id)
+            .all()
+        )
+        cert_count_by_user = dict(cert_query)
+        certifications_issued = sum(cert_count_by_user.values())
+
+    for row in links:
+        learner_id = str(row["learner_id"])
+        sessions = (
+            db.query(_PS)
+            .filter(_PS.user_id == learner_id)
+            .all()
+        )
+        completed = [s for s in sessions if s.status == "completed"]
+
+        latest = None
+        if sessions:
+            latest = max((s.started_at for s in sessions if s.started_at), default=None)
+        if latest is not None and latest >= week_ago:
+            active_this_week += 1
+
+        assessments = (
+            db.query(Assessment)
+            .join(_PS, _PS.id == Assessment.session_id)
+            .filter(_PS.user_id == learner_id)
+            .all()
+        )
+
+        accuracies = [a.overall_accuracy for a in assessments if a.overall_accuracy is not None]
+        avg = round(sum(accuracies) / len(accuracies), 1) if accuracies else 0.0
+        all_accuracies.extend(accuracies)
+
+        for a in assessments:
+            sign = (a.expected_sign or "").strip().upper()
+            if sign and a.overall_accuracy is not None:
+                by_letter.setdefault(sign, []).append(a.overall_accuracy)
+
+        done_lessons = {s.lesson_id for s in completed}
+        has_cert = cert_count_by_user.get(learner_id, 0) > 0
+
+        learners_rows.append({
+            "id": learner_id,
+            "name": row["username"],
+            "email": row["email"],
+            "level": "Beginner" if avg < 80 else "Intermediate" if avg < 90 else "Advanced",
+            "progress": len(done_lessons),
+            "accuracy": avg,
+            "status": "Certified" if has_cert else
+                      ("In Assessment" if sessions else "Needs Support"),
+        })
+
+    overall_avg = round(sum(all_accuracies) / len(all_accuracies), 1) if all_accuracies else 0.0
+    skill_breakdown = [
+        {"skill": key, "score": round(sum(v) / len(v), 1)}
+        for key, v in sorted(by_letter.items())
+    ]
+
+    return {
+        "assigned_learners": assigned_count,
+        "active_this_week": active_this_week,
+        "avg_accuracy": overall_avg,
+        "certifications_issued": certifications_issued,
+        "learners": learners_rows,
+        "skill_breakdown": skill_breakdown,
+    }
+
+
+@router.get(
     "/learners",
     response_model=list[TrainerLearnerSummary],
     status_code=status.HTTP_200_OK,

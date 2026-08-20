@@ -1,10 +1,30 @@
-from fastapi import APIRouter, HTTPException, status, Query, Depends, UploadFile, File
+"""
+Real database-backed Lesson CRUD service.
+
+All lesson management reads and writes the `lessons` table (the same catalog
+served by /api/courses/modules), so instructor-created lessons are persisted,
+survive restarts, and are immediately visible to learners.
+
+RBAC: create/update/delete/bulk-upload require an Instructor or Admin token.
+"""
+
+from fastapi import APIRouter, HTTPException, status, Query, Depends
 from typing import Optional, List
 from pydantic import BaseModel, Field, field_validator
 import csv
 import io
+import uuid as _uuid
+
+from sqlalchemy.orm import Session
+
+from app.db.database import get_db
+from app.models.models import Lesson, Module
 from app.utils.security import verify_token_and_role
-from app.utils.validation import ALLOWED_CATEGORIES, ALLOWED_DIFFICULTY, reject_malicious
+from app.utils.validation import (
+    ALLOWED_CATEGORIES,
+    ALLOWED_DIFFICULTY,
+    reject_malicious,
+)
 
 router = APIRouter(prefix="/api/lessons", tags=["Lessons Service"])
 
@@ -17,6 +37,7 @@ class LessonResponse(BaseModel):
     expected_gesture: str
     category: Optional[str] = "Alphabet"
     difficulty: Optional[str] = "Easy"
+
 
 class LessonCreate(BaseModel):
     module_id: str = Field(..., min_length=1, max_length=36)
@@ -51,6 +72,7 @@ class LessonCreate(BaseModel):
             )
         return value
 
+
 class CSVBulkUploadPayload(BaseModel):
     csv_content: str = Field(..., max_length=1_000_000)
 
@@ -59,217 +81,205 @@ class CSVBulkUploadPayload(BaseModel):
     def _reject_malicious_text(cls, value: str) -> str:
         return reject_malicious(value)
 
-# --- In-Memory Mock Datasets ---
-MOCK_LESSON_DB = {}
 
-def seed_alphabet_lessons():
-    """
-    Seeds the mock dataset with alphabet and sample lessons for testing.
-    """
-    mod_id = "mod_alphabet_101"
-    
-    # Seed A through Z alphabet lessons
-    for char_code in range(ord('A'), ord('Z') + 1):
-        letter = chr(char_code)
-        les_id = f"les_alphabet_{letter.lower()}"
-        MOCK_LESSON_DB[les_id] = {
-            "lesson_id": les_id,
-            "module_id": mod_id,
-            "title": f"The Letter {letter}",
-            "content_description": f"Master signing the alphabet letter '{letter}'.",
-            "expected_gesture": letter,
-            "category": "Alphabet",
-            "difficulty": "Easy"
-        }
+def _canonical_uuid(value: str | None, fallback: str | None = None) -> str:
+    """Coerce arbitrary ids into a valid UUID string (deterministic for lookups)."""
+    raw = value or fallback
+    if not raw:
+        return str(_uuid.uuid4())
+    try:
+        return str(_uuid.UUID(str(raw)))
+    except (ValueError, AttributeError):
+        return str(_uuid.uuid5(_uuid.NAMESPACE_DNS, str(raw)))
 
-    # Seed extra common word lessons
-    extra_words = [
-        {"id": "les_word_hello", "title": "Word Hello", "gesture": "HELLO", "cat": "Words", "diff": "Easy"},
-        {"id": "les_word_thankyou", "title": "Word Thank You", "gesture": "THANK_YOU", "cat": "Words", "diff": "Medium"},
-        {"id": "les_word_yes", "title": "Word Yes", "gesture": "YES", "cat": "Words", "diff": "Easy"},
-        {"id": "les_word_no", "title": "Word No", "gesture": "NO", "cat": "Words", "diff": "Easy"},
-        {"id": "les_word_please", "title": "Word Please", "gesture": "PLEASE", "cat": "Words", "diff": "Medium"}
-    ]
-    
-    for word in extra_words:
-        MOCK_LESSON_DB[word["id"]] = {
-            "lesson_id": word["id"],
-            "module_id": word["id"],
-            "title": word["title"],
-            "content_description": f"Learn how to sign {word['title']}.",
-            "expected_gesture": word["gesture"],
-            "category": word["cat"],
-            "difficulty": word["diff"]
-        }
 
-# Initialize mock data on startup
-seed_alphabet_lessons()
+def _resolve_module_id(db: Session, module_id: str) -> str:
+    """Return a real module id, falling back to the alphabet module if the
+    requested module does not exist (keeps the FK valid on both SQLite/Postgres)."""
+    requested = _canonical_uuid(module_id)
+    if db.query(Module).filter(Module.id == requested).first() is not None:
+        return requested
+    alphabet = (
+        db.query(Module)
+        .filter(Module.module_name == "American Sign Language: Alphabets")
+        .first()
+    )
+    if alphabet is not None:
+        return str(alphabet.id)
+    return requested
+
+
+def _lesson_to_response(lesson: Lesson) -> LessonResponse:
+    return LessonResponse(
+        lesson_id=str(lesson.id),
+        module_id=str(lesson.module_id),
+        title=lesson.title,
+        content_description=lesson.description or "",
+        expected_gesture=lesson.expected_gesture or "",
+        category=(lesson.category or "alphabet").capitalize(),
+        difficulty=(lesson.difficulty or "easy").capitalize(),
+    )
+
 
 # --- GET ALL LESSONS ---
 
 @router.get("", status_code=status.HTTP_200_OK, summary="List Lessons (paginated)", description="SRS Requirement: Fetch lessons with built-in search-by-name and pagination.")
 def get_all_lessons(
-    skip: int = Query(0, ge=0, description="Number of records to skip for pagination"),
-    limit: int = Query(10, ge=1, le=100, description="Number of records per page (default 10)"),
-    search: Optional[str] = Query(None, description="Search term for lesson title")
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=100),
+    search: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
 ):
-    """
-    SRS Requirement: Fetch lessons with built-in Search-by-name and Pagination (10 per page).
-    """
-    lessons_list = list(MOCK_LESSON_DB.values())
-    
+    query = db.query(Lesson)
     if search:
-        search_lower = search.lower()
-        lessons_list = [
-            les for les in lessons_list 
-            if search_lower in les["title"].lower()
-        ]
-        
-    total_count = len(lessons_list)
-    paginated_lessons = lessons_list[skip : skip + limit]
-    
+        query = query.filter(Lesson.title.ilike(f"%{search}%"))
+    total_count = query.count()
+    lessons = query.order_by(Lesson.id.asc()).offset(skip).limit(limit).all()
     return {
         "skip": skip,
         "limit": limit,
         "total": total_count,
-        "data": [LessonResponse(**les) for les in paginated_lessons]
+        "data": [_lesson_to_response(lesson) for lesson in lessons],
     }
+
 
 # --- STATIC SPECIFIC ROUTES (MUST BE BEFORE /{lesson_id} ROUTE) ---
 
-@router.get("/advanced", status_code=status.HTTP_200_OK, summary="List Advanced Lessons", description="Milestone 2 & 3 Requirement: Fetches extended multi-tier advanced lessons catalog.")
-def get_advanced_lessons():
-    """
-    Milestone 2 & 3 Requirement: Fetches extended multi-tier advanced lessons catalog.
-    """
-    advanced_lessons = [
-        les for les in MOCK_LESSON_DB.values()
-        if les.get("difficulty") in ["Medium", "Hard"] or les.get("category") == "Words"
-    ]
+@router.get("/advanced", status_code=status.HTTP_200_OK, summary="List Advanced Lessons")
+def get_advanced_lessons(db: Session = Depends(get_db)):
+    advanced_lessons = (
+        db.query(Lesson)
+        .filter((Lesson.category == "words") | (Lesson.difficulty.in_(["medium", "hard"])))
+        .limit(100)
+        .all()
+    )
     return {
         "count": len(advanced_lessons),
-        "advanced_lessons": advanced_lessons
+        "advanced_lessons": [_lesson_to_response(lesson) for lesson in advanced_lessons],
     }
 
-@router.post("/bulk-upload-csv", status_code=status.HTTP_201_CREATED, summary="Bulk Upload Lessons via CSV String", description="Milestone 3 Requirement: Bulk upload lessons via a CSV string payload. CSV header format: module_id,title,content_description,expected_gesture,category,difficulty")
-def bulk_upload_lessons_csv(payload: CSVBulkUploadPayload):
-    """
-    Milestone 3 Requirement: Bulk upload lessons via CSV string payload.
-    CSV header format: module_id,title,content_description,expected_gesture,category,difficulty
-    """
+
+@router.post("/bulk-upload-csv", status_code=status.HTTP_201_CREATED, summary="Bulk Upload Lessons via CSV String")
+def bulk_upload_lessons_csv(
+    payload: CSVBulkUploadPayload,
+    db: Session = Depends(get_db),
+    token_payload: dict = Depends(verify_token_and_role(["Instructor", "Admin"])),
+):
     if not payload or not payload.csv_content.strip():
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, 
-            detail="CSV content string payload must be provided."
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="CSV content string payload must be provided.",
         )
 
     f = io.StringIO(payload.csv_content.strip())
     reader = csv.DictReader(f)
-    
+
     created_lessons = []
     errors = []
     row_num = 1
-    
+
     for row in reader:
         row_num += 1
         module_id = row.get("module_id", "").strip()
         title = row.get("title", "").strip()
         expected_gesture = row.get("expected_gesture", "").strip()
-        
+
         if not title or not expected_gesture:
             errors.append(f"Row {row_num}: missing required title or expected_gesture.")
             continue
-            
-        new_id = f"les_csv_{len(MOCK_LESSON_DB) + 1}_{row_num}"
-        new_lesson = {
-            "lesson_id": new_id,
-            "module_id": module_id or "mod_alphabet_101",
-            "title": title,
-            "content_description": row.get("content_description", f"Bulk uploaded lesson {title}"),
-            "expected_gesture": expected_gesture,
-            "category": row.get("category", "General"),
-            "difficulty": row.get("difficulty", "Medium")
-        }
-        MOCK_LESSON_DB[new_id] = new_lesson
-        created_lessons.append(new_lesson)
-        
+
+        category = row.get("category", "general").strip().lower()
+        difficulty = row.get("difficulty", "medium").strip().lower()
+        if category not in ALLOWED_CATEGORIES:
+            errors.append(f"Row {row_num}: invalid category '{category}'.")
+            continue
+        if difficulty not in ALLOWED_DIFFICULTY:
+            errors.append(f"Row {row_num}: invalid difficulty '{difficulty}'.")
+            continue
+
+        lesson = Lesson(
+            slug=f"lesson-{_uuid.uuid4().hex[:12]}",
+            module_id=_resolve_module_id(db, module_id),
+            title=title,
+            description=row.get("content_description", f"Bulk uploaded lesson {title}"),
+            expected_gesture=expected_gesture,
+            category=category,
+            difficulty=difficulty,
+        )
+        db.add(lesson)
+        created_lessons.append(_lesson_to_response(lesson))
+
+    db.commit()
     return {
-        "message": f"Successfully parsed and created {len(created_lessons)} lessons.",
+        "message": f"Successfully created {len(created_lessons)} lessons.",
         "created_count": len(created_lessons),
-        "created_lessons": created_lessons,
-        "errors": errors
+        "created_lessons": [lesson.model_dump() for lesson in created_lessons],
+        "errors": errors,
     }
+
 
 # --- DYNAMIC PARAMETER ROUTES ---
 
-@router.get("/{lesson_id}", response_model=LessonResponse, status_code=status.HTTP_200_OK, summary="Get Lesson by ID", description="SRS Requirement: Fetch an individual lesson's details by ID.")
-def get_lesson_by_id(lesson_id: str):
-    """
-    SRS Requirement: Fetch an individual lesson details by ID.
-    """
-    if lesson_id not in MOCK_LESSON_DB:
+@router.get("/{lesson_id}", response_model=LessonResponse, status_code=status.HTTP_200_OK)
+def get_lesson_by_id(lesson_id: str, db: Session = Depends(get_db)):
+    lesson = db.query(Lesson).filter(Lesson.id == _canonical_uuid(lesson_id)).first()
+    if lesson is None:
         raise HTTPException(status_code=404, detail="The requested lesson could not be found.")
-    
-    return LessonResponse(**MOCK_LESSON_DB[lesson_id])
+    return _lesson_to_response(lesson)
 
-@router.post("", response_model=LessonResponse, status_code=status.HTTP_201_CREATED, summary="Create a Custom Lesson", description="RBAC: Instructor or Admin only. Adds a custom lesson to the catalog.")
+
+@router.post("", response_model=LessonResponse, status_code=status.HTTP_201_CREATED, summary="Create a Custom Lesson")
 def create_lesson(
     lesson_input: LessonCreate,
-    token_payload: dict = Depends(verify_token_and_role(["Instructor", "Admin"]))
+    db: Session = Depends(get_db),
+    token_payload: dict = Depends(verify_token_and_role(["Instructor", "Admin"])),
 ):
-    """
-    Day 6 Checkpoint: Create a custom lesson (Restricted to Instructors and Admins).
-    """
-    new_id = f"les_custom_{len(MOCK_LESSON_DB) + 1}"
-    
-    new_lesson = {
-        "lesson_id": new_id,
-        "module_id": lesson_input.module_id,
-        "title": lesson_input.title,
-        "content_description": lesson_input.content_description,
-        "expected_gesture": lesson_input.expected_gesture,
-        "category": lesson_input.category,
-        "difficulty": lesson_input.difficulty
-    }
-    
-    MOCK_LESSON_DB[new_id] = new_lesson
-    return LessonResponse(**new_lesson)
+    lesson = Lesson(
+        slug=f"lesson-{_uuid.uuid4().hex[:12]}",
+        module_id=_resolve_module_id(db, lesson_input.module_id),
+        title=lesson_input.title,
+        description=lesson_input.content_description,
+        expected_gesture=lesson_input.expected_gesture,
+        category=(lesson_input.category or "alphabet").lower(),
+        difficulty=(lesson_input.difficulty or "easy").lower(),
+    )
+    db.add(lesson)
+    db.commit()
+    db.refresh(lesson)
+    return _lesson_to_response(lesson)
 
-@router.put("/{lesson_id}", response_model=LessonResponse, status_code=status.HTTP_200_OK, summary="Update a Lesson", description="RBAC: Instructor or Admin only. Edits an existing lesson by ID.")
+
+@router.put("/{lesson_id}", response_model=LessonResponse, status_code=status.HTTP_200_OK)
 def update_lesson(
     lesson_id: str,
     lesson_update: LessonCreate,
-    token_payload: dict = Depends(verify_token_and_role(["Instructor", "Admin"]))
+    db: Session = Depends(get_db),
+    token_payload: dict = Depends(verify_token_and_role(["Instructor", "Admin"])),
 ):
-    """
-    Day 6 Checkpoint: Edit an existing lesson by ID (Restricted to Instructors and Admins).
-    """
-    if lesson_id not in MOCK_LESSON_DB:
+    lesson = db.query(Lesson).filter(Lesson.id == _canonical_uuid(lesson_id)).first()
+    if lesson is None:
         raise HTTPException(status_code=404, detail="The specified lesson to update could not be found.")
-        
-    updated_data = {
-        "lesson_id": lesson_id,
-        "module_id": lesson_update.module_id,
-        "title": lesson_update.title,
-        "content_description": lesson_update.content_description,
-        "expected_gesture": lesson_update.expected_gesture,
-        "category": lesson_update.category,
-        "difficulty": lesson_update.difficulty
-    }
-    
-    MOCK_LESSON_DB[lesson_id] = updated_data
-    return LessonResponse(**updated_data)
 
-@router.delete("/{lesson_id}", status_code=status.HTTP_200_OK, summary="Delete a Lesson", description="RBAC: Instructor or Admin only. Deletes a lesson by ID.")
+    lesson.module_id = _resolve_module_id(db, lesson_update.module_id)
+    lesson.title = lesson_update.title
+    lesson.description = lesson_update.content_description
+    lesson.expected_gesture = lesson_update.expected_gesture
+    lesson.category = (lesson_update.category or "alphabet").lower()
+    lesson.difficulty = (lesson_update.difficulty or "easy").lower()
+    db.commit()
+    db.refresh(lesson)
+    return _lesson_to_response(lesson)
+
+
+@router.delete("/{lesson_id}", status_code=status.HTTP_200_OK)
 def delete_lesson(
     lesson_id: str,
-    token_payload: dict = Depends(verify_token_and_role(["Instructor", "Admin"]))
+    db: Session = Depends(get_db),
+    token_payload: dict = Depends(verify_token_and_role(["Instructor", "Admin"])),
 ):
-    """
-    Day 6 Checkpoint: Delete a lesson by ID (Restricted to Instructors and Admins).
-    """
-    if lesson_id not in MOCK_LESSON_DB:
+    lesson = db.query(Lesson).filter(Lesson.id == _canonical_uuid(lesson_id)).first()
+    if lesson is None:
         raise HTTPException(status_code=404, detail="The specified lesson to delete could not be found.")
-        
-    del MOCK_LESSON_DB[lesson_id]
+    db.delete(lesson)
+    db.commit()
     return {"message": f"Lesson {lesson_id} deleted successfully."}

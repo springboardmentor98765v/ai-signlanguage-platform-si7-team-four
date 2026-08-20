@@ -47,3 +47,43 @@ Base.metadata.create_all(bind=_TEST_DB_ENGINE)
 #   - `app.main`'s startup `create_all(bind=engine)` now targets the temp DB too
 database.engine = _TEST_DB_ENGINE
 database.SessionLocal = _TEST_SESSION_MAKER
+
+
+# ---------------------------------------------------------------------------
+# Shared test helpers.
+#
+# Admin accounts cannot be self-registered (security rule enforced in auth.py),
+# so tests that need Admin / Instructor accounts seed them DIRECTLY into the
+# isolated temp database. Password hashes are real bcrypt so API login works.
+# ---------------------------------------------------------------------------
+import bcrypt as _bcrypt
+import uuid as _uuid
+
+
+def make_user(email, username=None, role="Learner", password="SecurePassword123!", is_active=True):
+    """Insert a real user row directly into the isolated temp DB."""
+    local_db = _TEST_SESSION_MAKER()
+    try:
+        user = models.User(
+            id=str(_uuid.uuid4()),
+            username=username or f"u_{_uuid.uuid4().hex[:8]}",
+            email=email,
+            password_hash=_bcrypt.hashpw(password.encode("utf-8"), _bcrypt.gensalt()).decode("utf-8"),
+            role=role,
+            is_active=is_active,
+        )
+        local_db.add(user)
+        local_db.commit()
+        local_db.refresh(user)
+        return {"id": str(user.id), "email": user.email, "username": user.username, "role": user.role}
+    finally:
+        local_db.close()
+
+
+def login_token(client, email, password="SecurePassword123!"):
+    """Log in via the API and return the access token."""
+    res = client.post("/api/auth/login", json={"email": email, "password": password})
+    assert res.status_code == 200, res.text
+    data = res.json()
+    token = data.get("access_token") or data.get("accessToken") or data["token"]
+    return token

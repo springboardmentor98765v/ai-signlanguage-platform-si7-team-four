@@ -102,6 +102,8 @@ from app.routers.instructor_router import router as instructor_router
 from app.routers.notification_router import router as notification_router
 from app.routers import auth, course, practice, trainer_router
 from app.routers import analytics, assessment, recommendation
+from app.routers.certificate import router as certificate_router
+from app.routers.report import router as report_router
 
 
 app = FastAPI(
@@ -186,6 +188,8 @@ app.include_router(trainer_router.router)
 app.include_router(analytics.router)
 app.include_router(assessment.router)
 app.include_router(recommendation.router)
+app.include_router(certificate_router)
+app.include_router(report_router)
 
 @app.get("/health", tags=["System Health & Status"], summary="Health Check", description="Confirm the backend is up and environment variables loaded.")
 def health_check():
@@ -229,7 +233,15 @@ def health_check():
     except Exception as exc:
         deps["storage"] = f"unhealthy: {type(exc).__name__}: {exc}"
 
-    overall = "healthy" if set(deps.values()) == {"healthy"} else "degraded"
+    # Overall health reflects the CORE backend runtime deps (database + storage).
+    # The model_inference service is a separately deployed external dependency:
+    # its connectivity is reported for observability but does not downgrade the
+    # platform's own health flag (the frontend readiness probes rely on `status`).
+    core_ok = all(
+        deps.get(dep, "unhealthy") == "healthy"
+        for dep in ("database", "storage")
+    )
+    overall = "healthy" if core_ok else "degraded"
 
     return {
         "status": overall,

@@ -22,6 +22,11 @@ PASSWORD = "SecurePassword123!"
 
 def _register(role, prefix="m4"):
     email = f"{prefix}_{uuid.uuid4().hex[:10]}@example.com"
+    if role == "Admin":
+        # Admin accounts cannot self-register (security rule); seed directly.
+        from conftest import make_user
+        user = make_user(email, username=f"{prefix}_{uuid.uuid4().hex[:6]}", role="Admin")
+        return user["email"], user["id"]
     res = client.post(
         "/api/auth/register",
         json={"username": f"{prefix}_{uuid.uuid4().hex[:6]}", "email": email, "password": PASSWORD, "role": role},

@@ -3,7 +3,7 @@ import { changePassword } from '../services/api';
 
 export default function Profile() {
   const [user] = useState(() => {
-    const stored = localStorage.getItem('user');
+    const stored = localStorage.getItem('user_info') || localStorage.getItem('user');
     return stored ? JSON.parse(stored) : { username: 'Learner User', email: '', role: 'Learner' };
   });
 

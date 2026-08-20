@@ -77,12 +77,12 @@ class LearnerDashboardResponse(BaseModel):
     """Response body for GET /api/auth/dashboard/learner."""
 
     message: str
-    accuracy_metric_stub: str
-    lessons_completed_stub: int
+    accuracy_metric: float
+    lessons_completed: int
 
 
 class InstructorDashboardResponse(BaseModel):
     """Response body for GET /api/auth/dashboard/instructor."""
 
     message: str
-    class_performance_average_stub: str
+    class_performance_average: float

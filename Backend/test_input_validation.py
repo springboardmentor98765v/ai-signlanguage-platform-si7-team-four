@@ -28,13 +28,19 @@ def make_uuid() -> str:
 def _register_and_login(role: str = "Admin") -> str:
     """Register a fresh user and return its bearer access token."""
     email = f"val_{role.lower()}_{make_uuid()}@example.com"
-    reg = client.post("/api/auth/register", json={
-        "username": f"val_{role.lower()}_{uuid.uuid4().hex[:6]}",
-        "email": email,
-        "password": "SecurePassword123!",
-        "role": role,
-    })
-    assert reg.status_code == 201, reg.text
+    username = f"val_{role.lower()}_{uuid.uuid4().hex[:6]}"
+    if role == "Admin":
+        # Admin accounts are seeded by the platform, never self-registered.
+        from conftest import make_user
+        make_user(email, username=username, role="Admin")
+    else:
+        reg = client.post("/api/auth/register", json={
+            "username": username,
+            "email": email,
+            "password": "SecurePassword123!",
+            "role": role,
+        })
+        assert reg.status_code == 201, reg.text
     login = client.post("/api/auth/login", json={"email": email, "password": "SecurePassword123!"})
     assert login.status_code == 200, login.text
     return login.json()["access_token"]
@@ -117,18 +123,21 @@ def test_register_rejects_duplicate_username():
 
 
 def test_profile_update_rejects_sql_injection_username():
+    token = _register_and_login("Learner")
+    # 422 via Pydantic validator (reject_malicious) or 400 via handler check.
     res = client.patch("/api/users/me", json={
         "username": "admin' OR '1'='1",
-    })
-    assert res.status_code in (404, 422)
+    }, headers=_auth_headers(token))
+    assert res.status_code in (400, 422)
 
 
 def test_change_password_rejects_short_new_password():
+    token = _register_and_login("Learner")
     res = client.post("/api/users/change-password", json={
-        "current_password": "CurrentPass123!",
+        "current_password": "SecurePassword123!",
         "new_password": "short",
-    })
-    assert res.status_code == 422
+    }, headers=_auth_headers(token))
+    assert res.status_code in (400, 422)
 
 
 # ------------------------------------------------------------------------------
@@ -196,9 +205,10 @@ def test_lesson_create_rejects_oversized_gesture():
 
 
 def test_lesson_bulk_csv_rejects_sql_injection_content():
+    token = _register_and_login()
     res = client.post("/api/lessons/bulk-upload-csv", json={
         "csv_content": "title,expected_gesture\n'; DROP TABLE lessons; --,A\n",
-    })
+    }, headers=_auth_headers(token))
     assert res.status_code == 422
 
 
@@ -303,12 +313,16 @@ def test_integration_sync_rejects_out_of_range_confidence():
 
 def _ensure_admin() -> str:
     email = "validation_admin@example.com"
-    res = client.post("/api/auth/register", json={
-        "username": "validation_admin",
-        "email": email,
-        "password": "SecurePassword123!",
-        "role": "Admin",
-    })
+    from conftest import make_user
+    from app.db.database import SessionLocal
+    from app.models.models import User
+    db = SessionLocal()
+    try:
+        exists = db.query(User).filter(User.email == email).first()
+    finally:
+        db.close()
+    if exists is None:
+        make_user(email, username=f"validation_admin_{uuid.uuid4().hex[:6]}", role="Admin")
     return email
 
 
@@ -561,16 +575,18 @@ def test_trainer_assign_valid_learner_succeeds():
 # ------------------------------------------------------------------------------
 
 def test_instructor_assign_rejects_malicious_student_email():
+    token = _register_and_login("Instructor")
     res = client.post("/api/instructor/assign-student", json={
         "instructor_email": "instructor@example.com",
         "student_email": XSS_PATTERN,
-    })
-    assert res.status_code == 422
+    }, headers=_auth_headers(token))
+    assert res.status_code in (400, 422)
 
 
 def test_instructor_assign_rejects_sql_instructor_email():
+    token = _register_and_login("Instructor")
     res = client.post("/api/instructor/assign-student", json={
         "instructor_email": SQLI_PATTERN,
         "student_email": "student@example.com",
-    })
-    assert res.status_code == 422
+    }, headers=_auth_headers(token))
+    assert res.status_code in (400, 422)

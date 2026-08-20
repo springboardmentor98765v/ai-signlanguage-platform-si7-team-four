@@ -8,25 +8,30 @@ export default function Lessons() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDifficulty, setSelectedDifficulty] = useState('All');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const navigate = useNavigate();
 
   const fetchCourseData = async (courseId) => {
     setLoading(true);
+    setError('');
     try {
       const data = await getCourseDetails(courseId);
       setSelectedCourse(data);
     } catch (err) {
-      console.warn('Could not load course details:', err);
+      setError(err.message || 'Failed to load course details.');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    let cancelled = false;
     async function loadInitialCourses() {
+      setLoading(true);
+      setError('');
       try {
-        const data = await getCourses();
-        const courseList = data?.courses || data || [];
+        const courseList = (await getCourses()) || [];
+        if (cancelled) return;
         setCourses(courseList);
         if (courseList.length > 0) {
           await fetchCourseData(courseList[0].course_id);
@@ -34,11 +39,13 @@ export default function Lessons() {
           setLoading(false);
         }
       } catch (err) {
-        console.warn('Could not load courses:', err);
+        if (cancelled) return;
+        setError(err.message || 'Failed to load courses.');
         setLoading(false);
       }
     }
     loadInitialCourses();
+    return () => { cancelled = true; };
   }, []);
 
   const handleStartPractice = (lesson) => {
@@ -96,23 +103,29 @@ export default function Lessons() {
       </div>
 
       {/* Course Tabs */}
-      <div style={{ display: 'flex', gap: '0.75rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem', marginBottom: '1.5rem', overflowX: 'auto' }}>
-        {courses.map((course) => (
-          <button
-            key={course.course_id}
-            onClick={() => fetchCourseData(course.course_id)}
-            className={selectedCourse?.course_id === course.course_id ? 'btn-primary' : 'btn-secondary'}
-            style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}
-          >
-            {course.title} ({course.level || 'All Levels'})
-          </button>
-        ))}
-      </div>
+{courses.length > 0 && (
+        <div style={{ display: 'flex', gap: '0.75rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem', marginBottom: '1.5rem', overflowX: 'auto' }}>
+          {courses.map((course) => (
+            <button
+              key={course.course_id}
+              onClick={() => fetchCourseData(course.course_id)}
+              className={selectedCourse?.course_id === course.course_id ? "btn-primary" : "btn-secondary"}
+              style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}
+            >
+              {course.title} ({course.level || 'All Levels'})
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Lesson Grid */}
       {loading ? (
         <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
           Loading course lessons...
+        </div>
+      ) : error ? (
+        <div className="card" style={{ padding: '2rem', textAlign: 'center', color: 'var(--danger)', fontWeight: 600 }}>
+          {error}
         </div>
       ) : filteredLessons.length === 0 ? (
         <div className="card" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '3rem' }}>

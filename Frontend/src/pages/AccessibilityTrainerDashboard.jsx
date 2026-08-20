@@ -28,28 +28,7 @@ export default function AccessibilityTrainerDashboard() {
           skillBreakdown: data.skill_breakdown || data.skillBreakdown || [],
         });
       } catch (err) {
-        console.warn('Could not fetch live analytics, using local safe cache:', err);
-        setTrainerData({
-          assignedLearners: 28,
-          activeThisWeek: 22,
-          avgAccuracy: 86.4,
-          certificationsIssued: 15,
-          learners: [
-            { id: 1, name: 'Aarav Patel', level: 'Intermediate', progress: 82, accuracy: 89, status: 'Certified' },
-            { id: 2, name: 'Ananya Sharma', level: 'Beginner', progress: 45, accuracy: 74, status: 'In Assessment' },
-            { id: 3, name: 'Rohan Gupta', level: 'Advanced', progress: 95, accuracy: 96, status: 'Certified' },
-            { id: 4, name: 'Meera Nair', level: 'Beginner', progress: 30, accuracy: 62, status: 'Needs Support' },
-            { id: 5, name: 'Vikram Joshi', level: 'Intermediate', progress: 68, accuracy: 81, status: 'In Assessment' },
-          ],
-          skillBreakdown: [
-            { skill: 'Alphabet Finger-Spelling (A-Z)', score: 91 },
-            { skill: 'Numeric Gestures (1-10)', score: 87 },
-            { skill: 'Dynamic Gesture Signs (J, Z)', score: 72 },
-            { skill: 'Hand-Shape Framing & Stability', score: 84 },
-            { skill: 'Thumb & Palm Alignment', score: 78 },
-          ],
-        });
-        setErrorMsg('Operating with local fallback cache until Backend endpoint is live.');
+        setErrorMsg(err.message || 'Unable to load trainer analytics.');
       } finally {
         setLoading(false);
       }

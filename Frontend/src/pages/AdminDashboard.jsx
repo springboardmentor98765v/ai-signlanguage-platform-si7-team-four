@@ -5,10 +5,12 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     async function loadAdminUsers() {
       setLoading(true);
+      setError('');
       try {
         const data = await getAllUsers();
         const formatted = (Array.isArray(data) ? data : []).map((u) => ({
@@ -20,12 +22,7 @@ export default function AdminDashboard() {
         }));
         setUsers(formatted);
       } catch (err) {
-        console.warn('Failed to load admin users, using fallback:', err);
-        setUsers([
-          { id: 'usr_1', name: 'Parvathy Manoj', email: 'parvathy@example.com', role: 'Learner', active: true },
-          { id: 'usr_2', name: 'Instructor John', email: 'john.instructor@example.com', role: 'Instructor', active: true },
-          { id: 'usr_3', name: 'Inactive Test User', email: 'test@example.com', role: 'Learner', active: false },
-        ]);
+        setError(err.message || 'Failed to load admin users.');
       } finally {
         setLoading(false);
       }
@@ -42,11 +39,7 @@ export default function AdminDashboard() {
         prev.map((u) => (u.id === user.id ? { ...u, active: !u.active } : u))
       );
     } catch (err) {
-      console.warn('Failed to toggle status on server:', err);
-      // Fallback state update
-      setUsers((prev) =>
-        prev.map((u) => (u.id === user.id ? { ...u, active: !u.active } : u))
-      );
+      setError(err.message || 'Failed to update user status.');
     } finally {
       setActionLoading(null);
     }
@@ -67,6 +60,10 @@ export default function AdminDashboard() {
         {loading ? (
           <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
             Loading platform accounts...
+          </div>
+        ) : error ? (
+          <div className="card" style={{ padding: '2rem', textAlign: 'center', color: 'var(--danger)', fontWeight: 600 }}>
+            {error}
           </div>
         ) : (
           <div className="table-container">
