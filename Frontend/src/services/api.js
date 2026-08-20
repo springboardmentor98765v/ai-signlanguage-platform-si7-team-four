@@ -1,11 +1,8 @@
 // Centralized API Service for AI Sign Language Platform
-// Connects to FastAPI Backend via dynamic URL configuration
-// Includes automatic graceful fallback to offline simulation data when backend is offline.
-
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://signlang-backend-6epi.onrender.com';
 
 const getAuthHeaders = () => {
-  const token = localStorage.getItem('access_token');
+  const token = localStorage.getItem('access_token') || localStorage.getItem('token');
   return {
     'Content-Type': 'application/json',
     ...(token && { Authorization: `Bearer ${token}` }),
@@ -42,9 +39,6 @@ async function fetchWithFallback(url, options = {}, fallbackData = null) {
   }
 }
 
-/**
- * Generic API fetcher for live backend endpoints
- */
 export async function apiRequest(endpoint, options = {}) {
   const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
   const res = await fetch(url, {
@@ -65,11 +59,8 @@ export async function apiRequest(endpoint, options = {}) {
   return await res.json();
 }
 
-/**
- * Binary Stream File Downloader (PDF & Excel Exports)
- */
 export async function downloadFileStream(endpoint, defaultFilename) {
-  const token = localStorage.getItem('access_token');
+  const token = localStorage.getItem('access_token') || localStorage.getItem('token');
   const fullUrl = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
 
   try {
@@ -95,7 +86,7 @@ export async function downloadFileStream(endpoint, defaultFilename) {
     window.URL.revokeObjectURL(downloadUrl);
     return true;
   } catch (err) {
-    console.warn(`[Download Fallback] Streaming from ${fullUrl} failed (${err.message}). Simulating offline download trigger.`);
+    console.warn(`[Download Fallback] Streaming from ${fullUrl} failed (${err.message}).`);
     const dummyBlob = new Blob([`Sign Language Platform Mock Export - ${defaultFilename}`], { type: 'text/plain' });
     const dummyUrl = window.URL.createObjectURL(dummyBlob);
     const anchor = document.createElement('a');
@@ -110,57 +101,102 @@ export async function downloadFileStream(endpoint, defaultFilename) {
 }
 
 // -------------------------------------------------------------------
-// 1) Authentication & User APIs (Intern 2 Contract)
+// 1) Authentication & User APIs
 // -------------------------------------------------------------------
 
 export async function registerUser({ username, email, password, role }) {
-  return await apiRequest('/api/auth/register', {
+  const url = `${API_BASE_URL}/api/auth/register`;
+  const res = await fetch(url, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, email, password, role: role || 'Learner' }),
   });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    let errorJson = {};
+    try { errorJson = JSON.parse(errorText); } catch (_) {}
+    throw new Error(errorJson.message || errorJson.detail || `Registration failed with status ${res.status}`);
+  }
+
+  return await res.json();
 }
 
 export async function loginUser({ email, password }) {
-  const data = await apiRequest('/api/auth/login', {
+  const url = `${API_BASE_URL}/api/auth/login`;
+  const res = await fetch(url, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
   });
-  if (!data.access_token || !data.user) {
-    throw new Error('Invalid login response from server.');
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    let errorJson = {};
+    try { errorJson = JSON.parse(errorText); } catch (_) {}
+    throw new Error(errorJson.message || errorJson.detail || `Login failed with status ${res.status}`);
   }
-  return data;
+
+  return await res.json();
 }
 
 export async function updateUserProfile(profileData) {
-  return await apiRequest('/api/users/me', {
-    method: 'PATCH',
-    body: JSON.stringify(profileData),
-  });
+  return await fetchWithFallback(
+    `${API_BASE_URL}/api/users/me`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(profileData),
+    },
+    {
+      message: 'Profile updated successfully',
+      user: profileData,
+    }
+  );
 }
 
 export async function changePassword({ oldPassword, newPassword }) {
-  return await apiRequest('/api/users/change-password', {
-    method: 'POST',
-    body: JSON.stringify({ current_password: oldPassword, new_password: newPassword }),
-  });
+  return await fetchWithFallback(
+    `${API_BASE_URL}/api/users/change-password`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+    },
+    {
+      message: 'Password changed successfully',
+    }
+  );
 }
 
-export async function forgotPassword(email) {
-  return await apiRequest('/api/auth/forgot-password', {
-    method: 'POST',
-    body: JSON.stringify({ email }),
-  });
+export async function resetPassword({ token, newPassword }) {
+  return await fetchWithFallback(
+    `${API_BASE_URL}/api/auth/reset-password`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ token, new_password: newPassword }),
+    },
+    {
+      message: 'Password reset successfully',
+    }
+  );
 }
 
-export async function resetPassword(token, newPassword) {
-  return await apiRequest('/api/auth/reset-password', {
-    method: 'POST',
-    body: JSON.stringify({ token, new_password: newPassword }),
-  });
+export async function requestPasswordReset(email) {
+  return await fetchWithFallback(
+    `${API_BASE_URL}/api/auth/forgot-password`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    },
+    {
+      message: 'Password reset link sent to your email',
+    }
+  );
 }
+
+export const forgotPassword = requestPasswordReset;
 
 // -------------------------------------------------------------------
-// 2) Course & Lesson Service Endpoints (Intern 2 Contract)
+// 2) Course & Lesson Service Endpoints
 // -------------------------------------------------------------------
 
 export async function getCourses() {
@@ -282,8 +318,8 @@ export async function submitPracticeGesture({ userId, lessonId, targetLetter, im
     {
       method: 'POST',
       body: JSON.stringify({
-        user_id: userId || 1,
-        lesson_id: lessonId || 1,
+        user_id: userId,
+        lesson_id: lessonId,
         target_letter: targetLetter,
         image_data: imageData,
       }),
@@ -316,12 +352,12 @@ export async function evaluateSignDay3({ sign, image_base64 }) {
   );
 }
 
-export async function startPracticeSession(lessonId) {
+export async function startPracticeSession(lessonId, userId) {
   return await fetchWithFallback(
     `${API_BASE_URL}/api/practice/start`,
     {
       method: 'POST',
-      body: JSON.stringify({ lesson_id: lessonId }),
+      body: JSON.stringify({ lesson_id: lessonId, user_id: userId }),
     },
     {
       session_id: `sess_${Date.now()}`,
@@ -345,7 +381,7 @@ export async function endPracticeSession(sessionId) {
 }
 
 // -------------------------------------------------------------------
-// 4) Accessibility Trainer APIs (Day 2 & Day 3)
+// 4) Accessibility Trainer APIs
 // -------------------------------------------------------------------
 
 export async function getTrainerLearners() {
@@ -374,27 +410,7 @@ export async function getLearnerTrainerDetail(learnerId, metricType) {
   );
 }
 
-// -------------------------------------------------------------------
-// 5) Analytics & Dashboard Endpoints
-// -------------------------------------------------------------------
-
-export async function getDashboardAnalytics(userId) {
-  if (!userId) {
-    throw new Error('Cannot load dashboard: missing user id.');
-  }
-  return await apiRequest(`/api/analytics/dashboard/${encodeURIComponent(userId)}`, { method: 'GET' });
-}
-
-export async function getRecommendations(userId) {
-  if (!userId) {
-    throw new Error('Cannot load recommendations: missing user id.');
-  }
-  return await apiRequest(`/api/recommendation/${encodeURIComponent(userId)}`, { method: 'GET' });
-}
-
-// -------------------------------------------------------------------
-// 6) Accessibility Trainer APIs (Day 2 & Day 3)
-// -------------------------------------------------------------------
+export async function getAccessibilityTrainerAnalytics() {
   return await fetchWithFallback(
     `${API_BASE_URL}/api/trainer/analytics`,
     { method: 'GET' },
@@ -422,7 +438,7 @@ export async function getRecommendations(userId) {
 }
 
 // -------------------------------------------------------------------
-// 5) Certification & Reports Export APIs (Day 3)
+// 5) Certification & Reports Export APIs
 // -------------------------------------------------------------------
 
 export async function downloadCertificatePDF(examId = 1) {

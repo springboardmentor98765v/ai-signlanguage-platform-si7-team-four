@@ -2,48 +2,49 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { loginUser } from '../services/api';
 
-export default function Login({ setUser }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+export default function Login() {
+  const [formData, setFormData] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const routeByUserRole = (role) => {
-    if (role === 'Administrator' || role === 'Admin') {
-      navigate('/admin');
-    } else if (role === 'Accessibility Trainer') {
-      navigate('/trainer-dashboard');
-    } else if (role === 'Instructor') {
-      navigate('/instructor');
-    } else {
-      navigate('/dashboard');
-    }
-  };
-
   const handleLogin = async (e) => {
-    if (e) e.preventDefault();
-    setLoading(true);
+    e.preventDefault();
     setError('');
+    setLoading(true);
 
     try {
-      const data = await loginUser({ email, password });
-
-      const currentUser = data.user;
-      if (!data.access_token || !currentUser) {
-        throw new Error('Invalid login response from server.');
+      const data = await loginUser(formData);
+      
+      const token = data.access_token || data.token;
+      if (!token) {
+        throw new Error('Authentication failed: No access token received from server.');
       }
 
-      localStorage.setItem('access_token', data.access_token);
-      localStorage.setItem('user_info', JSON.stringify(currentUser));
-      localStorage.setItem('user', JSON.stringify(currentUser));
-      localStorage.setItem('user_id', currentUser.user_id || '');
-      localStorage.setItem('username', currentUser.username || '');
-      localStorage.setItem('user_role', currentUser.role || '');
-      if (setUser) setUser(currentUser);
-      routeByUserRole(currentUser.role);
+      localStorage.setItem('access_token', token);
+      localStorage.setItem('token', token);
+
+      const user = data.user || {
+        id: data.user_id || 'usr_default',
+        email: formData.email,
+        username: formData.email.split('@')[0],
+        role: data.role || 'Learner',
+      };
+      localStorage.setItem('user', JSON.stringify(user));
+
+      // Role-based redirect routing
+      const userRole = (user.role || '').toLowerCase();
+      if (userRole.includes('admin')) {
+        navigate('/admin');
+      } else if (userRole.includes('trainer')) {
+        navigate('/trainer');
+      } else if (userRole.includes('instructor')) {
+        navigate('/instructor');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err) {
-      setError(err.message || 'Invalid credentials. Please try again.');
+      setError(err.message || 'Invalid email or password. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -52,20 +53,22 @@ export default function Login({ setUser }) {
   return (
     <div className="form-card">
       <h2 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '1.5rem', textAlign: 'center', color: 'var(--text-main)' }}>
-        Login to Account
+        Welcome Back
       </h2>
 
       {error && (
-        <div style={{
-          padding: '0.75rem',
-          borderRadius: 'var(--radius-md)',
-          backgroundColor: 'var(--danger-bg)',
-          color: 'var(--danger)',
-          fontSize: '0.85rem',
-          fontWeight: 600,
-          marginBottom: '1rem',
-          textAlign: 'center'
-        }}>
+        <div
+          className="alert-error"
+          style={{
+            padding: '0.75rem',
+            borderRadius: 'var(--radius-md)',
+            backgroundColor: 'var(--danger-bg)',
+            color: 'var(--danger)',
+            marginBottom: '1rem',
+            fontSize: '0.875rem',
+            textAlign: 'center',
+          }}
+        >
           {error}
         </div>
       )}
@@ -77,8 +80,9 @@ export default function Login({ setUser }) {
             type="email"
             required
             className="input-control"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            placeholder="name@example.com"
+            value={formData.email}
+            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
           />
         </div>
 
@@ -88,19 +92,9 @@ export default function Login({ setUser }) {
             type="password"
             required
             className="input-control"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </div>
-
-        <div className="form-group">
-          <label>Password</label>
-          <input
-            type="password"
-            required
-            className="input-control"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            value={formData.password}
+            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
           />
         </div>
 
@@ -108,17 +102,11 @@ export default function Login({ setUser }) {
           type="submit"
           disabled={loading}
           className="btn-primary"
-          style={{ width: '100%', marginTop: '0.5rem', padding: '0.75rem', fontWeight: 700 }}
+          style={{ width: '100%', marginTop: '0.5rem', padding: '0.75rem' }}
         >
           {loading ? 'Authenticating...' : 'Sign In'}
         </button>
       </form>
-
-      <p style={{ marginTop: '0.75rem', textAlign: 'center', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-        <Link to="/forgot-password" style={{ color: 'var(--primary)', fontWeight: '600', textDecoration: 'none' }}>
-          Forgot password?
-        </Link>
-      </p>
 
       <p style={{ marginTop: '1.25rem', textAlign: 'center', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
         Don't have an account?{' '}
