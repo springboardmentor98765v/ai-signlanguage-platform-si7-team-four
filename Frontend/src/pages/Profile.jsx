@@ -4,7 +4,7 @@ import { changePassword } from '../services/api';
 export default function Profile() {
   const [user] = useState(() => {
     const stored = localStorage.getItem('user');
-    return stored ? JSON.parse(stored) : { username: 'Parvathy K Manoj', email: 'parvathy@example.com', role: 'Learner' };
+    return stored ? JSON.parse(stored) : { username: 'Learner User', email: '', role: 'Learner' };
   });
 
   const [passwords, setPasswords] = useState({ old: '', newPass: '', confirm: '' });
@@ -23,9 +23,9 @@ export default function Profile() {
       return;
     }
 
-    if (passwords.newPass.length < 6) {
+    if (passwords.newPass.length < 8) {
       setIsError(true);
-      setMsg('New password must be at least 6 characters long');
+      setMsg('New password must be at least 8 characters long');
       return;
     }
 
@@ -99,7 +99,7 @@ export default function Profile() {
 
         <form onSubmit={handlePasswordChange}>
           <div className="form-group">
-            <label>Old Password</label>
+            <label>Current Password</label>
             <input
               type="password"
               required
@@ -110,7 +110,7 @@ export default function Profile() {
           </div>
 
           <div className="form-group">
-            <label>New Password (Min 6 chars)</label>
+            <label>New Password (Min 8 chars)</label>
             <input
               type="password"
               required

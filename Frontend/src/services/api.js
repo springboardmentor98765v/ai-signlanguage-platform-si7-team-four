@@ -114,71 +114,49 @@ export async function downloadFileStream(endpoint, defaultFilename) {
 // -------------------------------------------------------------------
 
 export async function registerUser({ username, email, password, role }) {
-  return await fetchWithFallback(
-    `${API_BASE_URL}/api/auth/register`,
-    {
-      method: 'POST',
-      body: JSON.stringify({ username, email, password, role: role || 'Learner' }),
-    },
-    {
-      message: 'User account created successfully (Mock Mode)',
-      user_id: `usr_${Date.now()}`,
-      role: role || 'Learner',
-    }
-  );
+  return await apiRequest('/api/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({ username, email, password, role: role || 'Learner' }),
+  });
 }
 
 export async function loginUser({ email, password }) {
-  return await fetchWithFallback(
-    `${API_BASE_URL}/api/auth/login`,
-    {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    },
-    {
-      access_token: `mock_jwt_token_${Date.now()}`,
-      token_type: 'bearer',
-      user: {
-        user_id: `usr_${Date.now()}`,
-        username: email.split('@')[0] || 'learner_user',
-        email: email,
-        role: email.includes('admin')
-          ? 'Administrator'
-          : email.includes('trainer')
-          ? 'Accessibility Trainer'
-          : email.includes('instructor')
-          ? 'Instructor'
-          : 'Learner',
-      },
-    }
-  );
+  const data = await apiRequest('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+  if (!data.access_token || !data.user) {
+    throw new Error('Invalid login response from server.');
+  }
+  return data;
 }
 
 export async function updateUserProfile(profileData) {
-  return await fetchWithFallback(
-    `${API_BASE_URL}/api/users/me`,
-    {
-      method: 'PATCH',
-      body: JSON.stringify(profileData),
-    },
-    {
-      message: 'Profile updated successfully',
-      user: profileData,
-    }
-  );
+  return await apiRequest('/api/users/me', {
+    method: 'PATCH',
+    body: JSON.stringify(profileData),
+  });
 }
 
 export async function changePassword({ oldPassword, newPassword }) {
-  return await fetchWithFallback(
-    `${API_BASE_URL}/api/users/change-password`,
-    {
-      method: 'POST',
-      body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
-    },
-    {
-      message: 'Password changed successfully',
-    }
-  );
+  return await apiRequest('/api/users/change-password', {
+    method: 'POST',
+    body: JSON.stringify({ current_password: oldPassword, new_password: newPassword }),
+  });
+}
+
+export async function forgotPassword(email) {
+  return await apiRequest('/api/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function resetPassword(token, newPassword) {
+  return await apiRequest('/api/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
 }
 
 // -------------------------------------------------------------------
@@ -384,7 +362,6 @@ export async function getTrainerLearners() {
 }
 
 export async function getLearnerTrainerDetail(learnerId, metricType) {
-  // metricType: 'engagement' | 'skill-development' | 'assessment-analytics' | 'certification-status'
   return await fetchWithFallback(
     `${API_BASE_URL}/api/trainer/learners/${learnerId}/${metricType}`,
     { method: 'GET' },
@@ -397,7 +374,27 @@ export async function getLearnerTrainerDetail(learnerId, metricType) {
   );
 }
 
-export async function getAccessibilityTrainerAnalytics() {
+// -------------------------------------------------------------------
+// 5) Analytics & Dashboard Endpoints
+// -------------------------------------------------------------------
+
+export async function getDashboardAnalytics(userId) {
+  if (!userId) {
+    throw new Error('Cannot load dashboard: missing user id.');
+  }
+  return await apiRequest(`/api/analytics/dashboard/${encodeURIComponent(userId)}`, { method: 'GET' });
+}
+
+export async function getRecommendations(userId) {
+  if (!userId) {
+    throw new Error('Cannot load recommendations: missing user id.');
+  }
+  return await apiRequest(`/api/recommendation/${encodeURIComponent(userId)}`, { method: 'GET' });
+}
+
+// -------------------------------------------------------------------
+// 6) Accessibility Trainer APIs (Day 2 & Day 3)
+// -------------------------------------------------------------------
   return await fetchWithFallback(
     `${API_BASE_URL}/api/trainer/analytics`,
     { method: 'GET' },

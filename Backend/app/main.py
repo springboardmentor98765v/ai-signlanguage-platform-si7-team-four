@@ -12,46 +12,73 @@ load_dotenv()
 
 SECRET_KEY = os.getenv("SECRET_KEY", "fallback_secret_key")
 
+from app.db.database import engine, Base, DATABASE_URL
 
-def _apply_sqlite_schema_migrations():
+
+def _apply_schema_migrations():
     """
-    Idempotent dev-only migrations for the local SQLite file (app_data.db).
+    Idempotent dev-only migrations for columns added after tables were created.
 
     create_all() adds new tables but not new columns to existing tables, so
     columns added after the DB file already exists need an explicit ALTER TABLE.
 
+    Runs for both SQLite (app_data.db) and PostgreSQL (deployed Neon DB).
     Must run BEFORE the routers are imported: the course router seeds the
     alphabet module/lessons into the DB at import time and needs the columns
     below to already exist.
     """
-    import sqlite3
-    from pathlib import Path
+    if DATABASE_URL.startswith("sqlite"):
+        import sqlite3
+        from pathlib import Path
 
-    # Resolve relative to the package (Backend/), not the process CWD, so the
-    # migration always targets the backend's own app_data.db.
-    db_path = Path(__file__).resolve().parent.parent / "app_data.db"
-    try:
-        with sqlite3.connect(db_path) as conn:
-            user_cols = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
-            if "instructor_id" not in user_cols:
-                conn.execute("ALTER TABLE users ADD COLUMN instructor_id VARCHAR(36)")
+        db_path = Path(__file__).resolve().parent.parent / "app_data.db"
+        try:
+            with sqlite3.connect(db_path) as conn:
+                user_cols = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
+                for col, ddl in {
+                    "instructor_id": "VARCHAR(36)",
+                    "reset_token_hash": "VARCHAR(255)",
+                    "reset_token_expires_at": "DATETIME",
+                }.items():
+                    if col not in user_cols:
+                        conn.execute(f"ALTER TABLE users ADD COLUMN {col} {ddl}")
 
-            module_cols = {row[1] for row in conn.execute("PRAGMA table_info(modules)")}
-            if "description" not in module_cols:
-                conn.execute("ALTER TABLE modules ADD COLUMN description TEXT")
-            if "created_at" not in module_cols:
-                conn.execute("ALTER TABLE modules ADD COLUMN created_at DATETIME")
-    except Exception:
-        pass
+                module_cols = {row[1] for row in conn.execute("PRAGMA table_info(modules)")}
+                if "description" not in module_cols:
+                    conn.execute("ALTER TABLE modules ADD COLUMN description TEXT")
+                if "created_at" not in module_cols:
+                    conn.execute("ALTER TABLE modules ADD COLUMN created_at DATETIME")
+        except Exception:
+            pass
+    else:
+        from sqlalchemy import inspect as sa_inspect
+        from sqlalchemy import text as sa_text
+
+        insp = sa_inspect(engine)
+        if insp.has_table("users"):
+            user_cols = {c["name"] for c in insp.get_columns("users")}
+            for col, ddl in {
+                "instructor_id": "VARCHAR(36)",
+                "reset_token_hash": "VARCHAR(255)",
+                "reset_token_expires_at": "TIMESTAMP",
+            }.items():
+                if col not in user_cols:
+                    with engine.begin() as conn:
+                        conn.execute(sa_text(f"ALTER TABLE users ADD COLUMN {col} {ddl}"))
 
 
-_apply_sqlite_schema_migrations()
+_apply_schema_migrations()
+
+# Fail fast: abort startup before serving traffic if the production config is
+# missing required values or points at dev-only endpoints (see predeploy/).
+from predeploy.config_check import validate_config_or_raise
+
+validate_config_or_raise()
 
 # Ensure all database tables exist BEFORE routers are imported. The course
 # router seeds the alphabet module/lessons at import time and queries the
 # "modules" table, so create_all() must run first or startup crashes with
 # "relation modules does not exist" on a fresh database.
-from app.db.database import engine, Base
 from app.models import models
 Base.metadata.create_all(bind=engine)
 
@@ -68,6 +95,7 @@ from app.routers.admin_router import router as admin_router
 from app.routers.instructor_router import router as instructor_router
 from app.routers.notification_router import router as notification_router
 from app.routers import auth, course, practice, trainer_router
+from app.routers import analytics, assessment, recommendation
 
 
 app = FastAPI(
@@ -149,16 +177,59 @@ app.include_router(lessons_router)
 app.include_router(course.router)
 app.include_router(practice.router)
 app.include_router(trainer_router.router)
+app.include_router(analytics.router)
+app.include_router(assessment.router)
+app.include_router(recommendation.router)
 
 @app.get("/health", tags=["System Health & Status"], summary="Health Check", description="Confirm the backend is up and environment variables loaded.")
 def health_check():
     """
-    Health check endpoint supporting GET to confirm backend status.
+    Health check endpoint reporting the status of each dependency separately
+    (database, model inference service, storage) rather than one combined flag.
     """
+    import os as _os
+    from app.db.database import engine
+
+    deps: dict[str, str] = {}
+
+    # 1. Database
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        deps["database"] = "healthy"
+    except Exception as exc:
+        deps["database"] = f"unhealthy: {type(exc).__name__}: {exc}"
+
+    # 2. Model inference service
+    ai_url = _os.getenv("AI_SERVICE_URL", "http://ai-service:8001").rstrip("/")
+    try:
+        import httpx
+        ai_resp = httpx.get(f"{ai_url}/health", timeout=5.0)
+        deps["model_inference"] = "healthy"
+        if ai_resp.status_code != 200:
+            deps["model_inference"] = f"unhealthy: HTTP {ai_resp.status_code}"
+    except Exception as exc:
+        deps["model_inference"] = f"unhealthy: {type(exc).__name__}: {exc}"
+
+    # 3. Storage (PDF/certificate output dir)
+    pdf_dir = _os.getenv("PDF_OUTPUT_DIR", "/tmp/certificates")
+    try:
+        _os.makedirs(pdf_dir, exist_ok=True)
+        if not _os.access(pdf_dir, os.W_OK):
+            deps["storage"] = f"unhealthy: {pdf_dir} not writable"
+        else:
+            deps["storage"] = "healthy"
+    except Exception as exc:
+        deps["storage"] = f"unhealthy: {type(exc).__name__}: {exc}"
+
+    overall = "healthy" if set(deps.values()) == {"healthy"} else "degraded"
+
     return {
-        "status": "healthy", 
-        "env_loaded": bool(SECRET_KEY), 
+        "status": overall,
+        "env_loaded": bool(SECRET_KEY),
         "api_status": "frozen_production_ready",
+        "dependencies": deps,
         "milestone_tracker": {
             "milestone_1": "Complete",
             "milestone_2": "Complete",

@@ -42,3 +42,7 @@ env/
 # Database backups
 backups/
 *.dump
+mail_outbox/
+__pycache__/
+*.pyc
+mail_outbox

@@ -39,14 +39,10 @@ export default function Register() {
         setMessage(data.message || 'Account created successfully!');
         setTimeout(() => navigate('/login'), 1500);
       } else {
-        setError(data.message || 'Registration failed');
+        setError(data.detail || data.message || 'Registration failed');
       }
-    } catch {
-      setMessage('Account created successfully! Redirecting to login...');
- main
-      setTimeout(() => navigate('/login'), 1500);
-    } catch (err) {
-      setError(err.message || 'Registration failed');
+} catch (err) {
+      setError(err.message || 'Unable to reach the server. Please check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -107,7 +103,6 @@ export default function Register() {
             <option value="Learner">Learner</option>
             <option value="Instructor">Instructor</option>
             <option value="Accessibility Trainer">Accessibility Trainer</option>
-            <option value="Administrator">Administrator</option>
           </select>
         </div>
 

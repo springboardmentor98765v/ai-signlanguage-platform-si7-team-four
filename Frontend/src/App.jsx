@@ -3,6 +3,8 @@ import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-ro
 
 import Login from './pages/Login';
 import Register from './pages/Register';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import Lessons from './pages/Lessons';
 import Practice from './pages/Practice';
@@ -175,6 +177,8 @@ export default function App() {
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<Login setUser={setUser} />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
 
             <Route path="/dashboard" element={<ProtectedRoute isAuthenticated={isAuthenticated}><Dashboard /></ProtectedRoute>} />
             <Route path="/lessons" element={<ProtectedRoute isAuthenticated={isAuthenticated}><Lessons /></ProtectedRoute>} />

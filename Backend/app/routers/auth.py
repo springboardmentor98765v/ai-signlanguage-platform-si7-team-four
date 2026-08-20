@@ -42,9 +42,6 @@ from app.models.models import User
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
-# Temporary simulated database storage dictionary (kept for login path compatibility)
-MOCK_USER_DB = {}
-
 @router.post(
     "/register",
     status_code=status.HTTP_201_CREATED,
@@ -67,10 +64,17 @@ def register_user(
     """
     # 1. Check if user already exists in the real database using the imported User model
     existing_user = db.query(User).filter(User.email == user_data.email).first()
-    if existing_user or user_data.email in MOCK_USER_DB:
+    if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User account already exists with this email."
+        )
+
+    # Administrator accounts are created by the platform, never self-registered.
+    if user_data.role == "Admin" or user_data.role == "Administrator":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Administrator accounts cannot be self-registered."
         )
 
     # Usernames are unique too - flag duplicates before the DB raises IntegrityError.
@@ -90,7 +94,7 @@ def register_user(
     # 3. Create a clean, valid UUID string
     new_user_id = str(uuid.uuid4())
     
-    # 4. Save the user to the actual PostgreSQL database table
+    # 4. Save the user to the actual database table
     new_db_user = User(
         id=new_user_id,
         username=user_data.username,
@@ -101,15 +105,6 @@ def register_user(
     db.add(new_db_user)
     db.commit()
     db.refresh(new_db_user)
-    
-    # 5. Keep the local mock dictionary synchronized for the login endpoint
-    MOCK_USER_DB[user_data.email] = {
-        "user_id": new_user_id,
-        "username": user_data.username,
-        "email": user_data.email,
-        "password": hashed_password_str,
-        "role": user_data.role
-    }
     
     return {
         "message": "User registered successfully.",
@@ -137,30 +132,23 @@ def login_user(
     """
     Day 4 Upgraded Deliverable: Validates credentials and returns cryptographic access & refresh tokens.
     """
-    # The real database is the source of truth: read the user's current row so
-    # admin role/status changes are picked up on the NEXT login (the in-memory
-    # MOCK_USER_DB snapshot can otherwise go stale). MOCK is kept in sync and is
-    # only used as a fallback for accounts that predate the DB-backed users.
-    user_record = None
+    # The database is the source of truth for account credentials, role, and status.
     db_user = db.query(User).filter(User.email == login_data.email).first()
-    if db_user is not None:
-        user_record = {
-            "user_id": str(db_user.id),
-            "username": db_user.username,
-            "email": db_user.email,
-            "password": db_user.password_hash,
-            "role": db_user.role
-        }
-        MOCK_USER_DB[login_data.email] = user_record
-    else:
-        user_record = MOCK_USER_DB.get(login_data.email)
 
-    if not user_record:
+    if db_user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password provided."
         )
-    
+
+    user_record = {
+        "user_id": str(db_user.id),
+        "username": db_user.username,
+        "email": db_user.email,
+        "password": db_user.password_hash,
+        "role": db_user.role
+    }
+
     provided_password_bytes = login_data.password.encode('utf-8')
     stored_hash_bytes = user_record["password"].encode('utf-8')
     

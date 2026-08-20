@@ -53,6 +53,8 @@ class User(Base):
         ForeignKey("users.id"),
         nullable=True,
     )
+    reset_token_hash = Column(String(255), nullable=True)
+    reset_token_expires_at = Column(DateTime, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
