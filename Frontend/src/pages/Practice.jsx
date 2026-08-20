@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { submitPracticeGesture, startPracticeSession, endPracticeSession } from '../services/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -49,8 +48,10 @@ export default function Practice() {
   const [maxAttempts] = useState(5);
   const [timeLeft, setTimeLeft] = useState(30);
   const [isTimerActive, setIsTimerActive] = useState(false);
-  const [streakCount] = useState(7);
-  const [sessionId, setSessionId] = useState('sess_112233');
+  const [streakCount, setStreakCount] = useState(0);
+  const [sessionId, setSessionId] = useState('');
+  const sessionIdRef = useRef('');
+  const [lessonLookup, setLessonLookup] = useState({});
   
   // AI Diagnostics State
   const [loading, setLoading] = useState(false);
@@ -105,16 +106,8 @@ export default function Practice() {
       setIsCameraOn(true);
       setTimeLeft(30);
       setIsTimerActive(true);
-
-      // Start backend practice session
-      try {
-        const sessionRes = await startPracticeSession(1);
-        if (sessionRes?.session_id) {
-          setSessionId(sessionRes.session_id);
-        }
-      } catch (_) {}
     } catch (err) {
-      setErrorMsg('Webcam access denied or camera not found. Operating in fallback simulation mode.');
+      setErrorMsg('Webcam access denied or camera not found. Enable the webcam to practice.');
       setIsCameraOn(false);
     } finally {
       setCameraLoading(false);
@@ -128,15 +121,33 @@ export default function Practice() {
     }
     setIsCameraOn(false);
     setIsTimerActive(false);
-    try {
-      endPracticeSession(sessionId);
-    } catch (_) {}
   };
 
   useEffect(() => {
     return () => {
       stopCamera();
     };
+  }, []);
+
+  // Load the real lesson catalog once so practice attempts reference real
+  // lesson ids (persisted practice records stay linked to real lessons).
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/api/courses/modules`, {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}` },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        const modules = Array.isArray(data) ? data : data.modules || [];
+        const lookup = {};
+        for (const mod of modules) {
+          for (const lesson of mod.lessons || []) {
+            const letter = (lesson.expected_gesture || '').toString().toUpperCase();
+            if (letter && !lookup[letter]) lookup[letter] = lesson.lesson_id || lesson.id;
+          }
+        }
+        setLessonLookup(lookup);
+      })
+      .catch(() => {/* lesson catalog unavailable; session runs without a lesson id */});
   }, []);
 
   // --------------------------------------------------------------------------
@@ -158,32 +169,53 @@ export default function Practice() {
     setPrediction(null);
     setErrorMsg('');
 
-    // Retrieve active User & Lesson IDs from LocalStorage
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    const userId = user?.id || user?.user_id || 1;
-    const lessonId = 1;
+    // Retrieve the authenticated user from LocalStorage.
+    const storedUser = localStorage.getItem('user') || localStorage.getItem('user_info');
+    const user = storedUser ? JSON.parse(storedUser) : null;
+    const userId = user?.user_id || localStorage.getItem('user_id');
+    const lessonId = lessonLookup[selectedLetter] || null;
 
- feature/frontend-day4-clean
-    try {
-      const data = await submitPracticeGesture({
-        userId,
-        lessonId,
-        targetLetter: selectedLetter,
-        imageData: base64Image,
+    const authHeaders = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
+    };
+
+    // Start a real practice session on the first attempt (if not already running).
+    const startSession = async () => {
+      if (sessionIdRef.current) return sessionIdRef.current;
+      if (!userId) {
+        throw new Error('No authenticated user found. Please sign in again.');
+      }
+      const params = new URLSearchParams({ user_id: userId });
+      if (lessonId) params.set('lesson_id', lessonId);
+      const res = await fetch(`${API_BASE_URL}/api/practice/start?${params.toString()}`, {
+        method: 'POST',
+        headers: authHeaders,
       });
+      if (!res.ok) throw new Error(`Failed to start practice session (${res.status})`);
+      const data = await res.json();
+      sessionIdRef.current = data.session_id;
+      setSessionId(data.session_id);
+      return data.session_id;
+    };
 
-      // Parse output gracefully across mock schema and real AI service schema
-      const predicted = data.predicted_sign || data.metrics?.predicted_sign || selectedLetter;
-      
-      let confScore = 85;
-      if (typeof data.confidence === 'number') {
-        confScore = data.confidence <= 1 ? Math.round(data.confidence * 100) : Math.round(data.confidence);
-      } else if (data.metrics?.confidence_percentage) {
-        confScore = Math.round(data.metrics.confidence_percentage);
+    const endSession = async () => {
+      if (!sessionIdRef.current) return;
+      try {
+        await fetch(`${API_BASE_URL}/api/practice/end?session_id=${sessionIdRef.current}`, {
+          method: 'POST',
+          headers: authHeaders,
+        });
+      } catch { /* session end is best-effort */ }
+    };
 
     const finish = () => {
       setLoading(false);
-      setAttemptCount((prev) => (prev >= maxAttempts ? 1 : prev + 1));
+      setAttemptCount((prev) => {
+        const next = prev >= maxAttempts ? 1 : prev + 1;
+        if (prev >= maxAttempts) endSession();
+        return next;
+      });
     };
 
     // Try up to 3 fresh frames before giving up on hand detection —
@@ -195,101 +227,40 @@ export default function Practice() {
       if (!base64Image) {
         setErrorMsg('Camera is not ready. Turn the camera on first.');
         break;
- main
       }
 
       try {
+        const currentSessionId = await startSession();
         const response = await fetch(`${API_BASE_URL}/api/practice/submit`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
-          },
+          headers: authHeaders,
           body: JSON.stringify({
             user_id: userId,
             lesson_id: lessonId,
+            session_id: currentSessionId,
             target_letter: selectedLetter,
             image_data: base64Image,
           }),
         });
 
- feature/frontend-day4-clean
-      setMetrics({
-        handShape: data.metrics?.hand_shape || data.metrics?.hand_shape_match || (confScore > 80 ? 92 : 60),
-        fingerPosition: data.metrics?.finger_position || (confScore > 80 ? 88 : 55),
-        timingAlignment: data.metrics?.timing || 90,
-      });
-
-      if (confScore > 80) {
-        setModalData({
-          title: 'High Accuracy Achieved!',
-          message: `Incredible precision! You matched Sign '${selectedLetter}' with ${confScore}% confidence.`,
-          icon: '🏆'
-        });
-        setShowPopup(true);
-      }
-    } catch (err) {
-      console.warn("Backend connection issue, running local simulation fallback:", err);
-
-      const isCorrect = Math.random() > 0.25;
-      const confidenceScore = isCorrect
-        ? Math.floor(Math.random() * 12) + 86
-        : Math.floor(Math.random() * 35) + 35;
-
-      const activeSet = selectedCategory === 'alphabets' ? alphabet : numbers;
-      const predicted = isCorrect
-        ? selectedLetter
-        : activeSet[Math.floor(Math.random() * activeSet.length)];
-
-      const feedbackMsg = isCorrect
-        ? `Excellent execution for '${selectedLetter}'! Finger positioning and palm angle align with target standards.`
-        : `Detected sign '${predicted}'. Try adjusting your thumb angle and keep your knuckles level with the lens.`;
-
-      setPrediction({
-        predicted_sign: predicted,
-        confidence: confidenceScore,
-        feedback: feedbackMsg,
-      });
-
-      setMetrics({
-        handShape: isCorrect ? Math.floor(Math.random() * 10) + 90 : Math.floor(Math.random() * 30) + 40,
-        fingerPosition: isCorrect ? Math.floor(Math.random() * 12) + 85 : Math.floor(Math.random() * 30) + 45,
-        timingAlignment: isCorrect ? Math.floor(Math.random() * 10) + 88 : Math.floor(Math.random() * 25) + 50,
-      });
-
-      if (confidenceScore > 85) {
-        setModalData({
-          title: 'High Accuracy Achieved!',
-          message: `Incredible precision! You matched Sign '${selectedLetter}' with ${confidenceScore}% confidence.`,
-          icon: '🏆'
-        });
-        setShowPopup(true);
-      }
-    } finally {
-      setLoading(false);
-      setAttemptCount((prev) => (prev >= maxAttempts ? 1 : prev + 1));
-
         if (!response.ok) {
-          throw new Error(`Server returned ${response.status}`);
+          const body = await response.text();
+          throw new Error(body || `Server returned ${response.status}`);
         }
 
         const data = await response.json();
 
         const handDetected = data.hand_detected !== false;
-        const predicted = data.predicted_sign || data.metrics?.predicted_sign || null;
+        const predicted = data.predicted_sign || null;
 
         // Hand didn't register on this frame — retry with a fresher one.
         if (!handDetected || !predicted) continue;
 
-        let confScore = 0;
-        if (typeof data.confidence === 'number') {
-          confScore = data.confidence <= 1 ? Math.round(data.confidence * 100) : Math.round(data.confidence);
-        } else if (data.metrics?.confidence_percentage) {
-          confScore = Math.round(data.metrics.confidence_percentage);
-        }
+        const confScore = typeof data.confidence === 'number'
+          ? (data.confidence <= 1 ? Math.round(data.confidence * 100) : Math.round(data.confidence))
+          : 0;
 
         const feedbackText = data.possible_issue
-          || data.feedback
           || (data.correct === true
               ? `Great job! Hand posture matches target '${selectedLetter}' accurately.`
               : data.correct === false
@@ -302,12 +273,13 @@ export default function Practice() {
           feedback: feedbackText,
         });
 
-        const baseline = confScore > 80 ? 92 : 60;
         setMetrics({
-          handShape: data.metrics?.hand_shape_match || data.metrics?.hand_shape || baseline,
-          fingerPosition: data.metrics?.finger_position || (confScore > 80 ? 88 : 55),
-          timingAlignment: data.metrics?.timing || 90,
+          handShape: data.overall_accuracy ?? (confScore > 80 ? 92 : 60),
+          fingerPosition: data.overall_accuracy ?? (confScore > 80 ? 88 : 55),
+          timingAlignment: data.overall_accuracy ?? 90,
         });
+
+        if (typeof data.updated_streak === 'number') setStreakCount(data.updated_streak);
 
         if (confScore > 80) {
           setModalData({
@@ -321,49 +293,10 @@ export default function Practice() {
         return;
 
       } catch (err) {
-        console.warn("Backend connection issue, running local simulation fallback:", err);
-
-        // Fallback Simulation Engine if backend service is unreachable
-        setTimeout(() => {
-          const isCorrect = Math.random() > 0.25;
-          const confidenceScore = isCorrect
-            ? Math.floor(Math.random() * 12) + 86
-            : Math.floor(Math.random() * 35) + 35;
-
-          const activeSet = selectedCategory === 'alphabets' ? alphabet : numbers;
-          const predicted = isCorrect
-            ? selectedLetter
-            : activeSet[Math.floor(Math.random() * activeSet.length)];
-
-          const feedbackMsg = isCorrect
-            ? `Excellent execution for '${selectedLetter}'! Finger positioning and palm angle align with target standards.`
-            : `Detected sign '${predicted}'. Try adjusting your thumb angle and keep your knuckles level with the lens.`;
-
-          setPrediction({
-            predicted_sign: predicted,
-            confidence: confidenceScore,
-            feedback: feedbackMsg,
-          });
-
-          setMetrics({
-            handShape: isCorrect ? Math.floor(Math.random() * 10) + 90 : Math.floor(Math.random() * 30) + 40,
-            fingerPosition: isCorrect ? Math.floor(Math.random() * 12) + 85 : Math.floor(Math.random() * 30) + 45,
-            timingAlignment: isCorrect ? Math.floor(Math.random() * 10) + 88 : Math.floor(Math.random() * 25) + 50,
-          });
-
-          if (confidenceScore > 85) {
-            setModalData({
-              title: 'High Accuracy Achieved!',
-              message: `Incredible precision! You matched Sign '${selectedLetter}' with ${confidenceScore}% confidence.`,
-              icon: '🏆'
-            });
-            setShowPopup(true);
-          }
-        }, 600);
-        finish();
+        setErrorMsg(`Analysis failed: ${err.message || 'backend unavailable'}. No result was recorded.`);
+        setLoading(false);
         return;
       }
- main
     }
 
     // Every frame came back without a detectable hand — be honest about it.
@@ -378,6 +311,14 @@ export default function Practice() {
   };
 
   const resetSession = () => {
+    if (sessionIdRef.current) {
+      fetch(`${API_BASE_URL}/api/practice/end?session_id=${sessionIdRef.current}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}` },
+      }).catch(() => {});
+      sessionIdRef.current = '';
+    }
+    setSessionId('');
     setAttemptCount(1);
     setTimeLeft(30);
     setPrediction(null);
@@ -409,7 +350,7 @@ export default function Practice() {
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
           <span className="streak-pill">🔥 {streakCount} Day Practice Streak</span>
-          <span className="badge badge-primary">Session ID: {sessionId}</span>
+          {sessionId && <span className="badge badge-primary">Session: {sessionId.slice(0, 8)}</span>}
           <button onClick={resetSession} className="btn-secondary" style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}>
             🔄 Reset Session
           </button>
@@ -510,7 +451,7 @@ export default function Practice() {
                 <p style={{ fontSize: '0.875rem', marginBottom: '0.5rem', color: '#cbd5e1' }}>
                   {errorMsg || 'Webcam is currently off. Click "Turn On Camera" above.'}
                 </p>
-                <span className="badge badge-secondary">OFFLINE / FALLBACK SIMULATION MODE</span>
+                <span className="badge badge-secondary">OFFLINE</span>
               </div>
             )}
             

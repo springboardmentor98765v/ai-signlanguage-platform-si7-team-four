@@ -66,6 +66,12 @@ def _apply_schema_migrations():
                     with engine.begin() as conn:
                         conn.execute(sa_text(f"ALTER TABLE users ADD COLUMN {col} {ddl}"))
 
+        if insp.has_table("notifications"):
+            notif_cols = {c["name"] for c in insp.get_columns("notifications")}
+            if "title" not in notif_cols:
+                with engine.begin() as conn:
+                    conn.execute(sa_text("ALTER TABLE notifications ADD COLUMN title VARCHAR(200) NOT NULL DEFAULT ''"))
+
 
 _apply_schema_migrations()
 
