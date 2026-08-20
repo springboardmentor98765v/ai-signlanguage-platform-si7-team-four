@@ -66,6 +66,16 @@ def _apply_schema_migrations():
                     with engine.begin() as conn:
                         conn.execute(sa_text(f"ALTER TABLE users ADD COLUMN {col} {ddl}"))
 
+            # Widen role so "Accessibility Trainer" (21 chars) fits. Older Neon
+            # databases created users.role as VARCHAR(20), which silently
+            # rejects that valid role on self-registration with a 500.
+            role_type = str(next(
+                (c["type"] for c in insp.get_columns("users") if c["name"] == "role"), ""
+            ))
+            if role_type == "VARCHAR(20)":
+                with engine.begin() as conn:
+                    conn.execute(sa_text("ALTER TABLE users ALTER COLUMN role TYPE VARCHAR(50)"))
+
         if insp.has_table("notifications"):
             notif_cols = {c["name"] for c in insp.get_columns("notifications")}
             if "title" not in notif_cols:
