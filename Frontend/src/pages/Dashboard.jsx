@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { apiRequest } from '../services/api';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { getDashboardAnalytics, getRecommendations } from '../services/api';
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
@@ -11,81 +9,55 @@ export default function Dashboard() {
   const [lessonsData, setLessonsData] = useState([]);
   const [badges, setBadges] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
- feature/frontend-day4-clean
-    async function loadDashboardData() {
-      try {
-        const [dashData, recData] = await Promise.all([
-          apiRequest('/api/analytics/dashboard'),
-          apiRequest('/api/analytics/recommendations'),
-        ]);
-
-
-    Promise.all([
-      fetch(`${API_BASE_URL}/api/analytics/dashboard`).then((res) => res.json()),
-      fetch(`${API_BASE_URL}/api/analytics/recommendations`).then((res) => res.json()),
-    ])
-      .then(([dashData, recData]) => {
- main
-        setStats(dashData);
-        setRecommendations(recData.recommended_lessons || []);
-        setAccuracyData([
-          { day: 'Mon', accuracy: 75 },
-          { day: 'Tue', accuracy: 80 },
-          { day: 'Wed', accuracy: 85 },
-          { day: 'Thu', accuracy: 88 },
-          { day: 'Fri', accuracy: dashData.overall_accuracy_percentage || 91 },
-        ]);
-        setLessonsData([
-          { week: 'W1', count: 4 },
-          { week: 'W2', count: 8 },
-          { week: 'W3', count: 12 },
-          { week: 'W4', count: dashData.lessons_completed || 18 },
-        ]);
-      } catch (err) {
-        console.warn('Dashboard analytics unreachable, using default view:', err);
-        setStats({
-          overall_accuracy_percentage: 91.0,
-          lessons_completed: 18,
-          practice_hours: 24.5,
-          improvement_rate_percentage: 12.0,
-          current_streak: 7,
-        });
-        setRecommendations([
-          { lesson_id: 'les_letter_m', title: 'Letter M Practice', reason: 'Thumb position accuracy fell below 75% in your last 3 attempts.' },
-          { lesson_id: 'les_letter_n', title: 'Letter N Practice', reason: 'Identified as a core weak area this week.' },
-        ]);
-        setAccuracyData([
-          { day: 'Mon', accuracy: 75 },
-          { day: 'Tue', accuracy: 82 },
-          { day: 'Wed', accuracy: 88 },
-          { day: 'Thu', accuracy: 91 },
-        ]);
-        setLessonsData([
-          { week: 'W1', count: 5 },
-          { week: 'W2', count: 10 },
-          { week: 'W3', count: 18 },
-        ]);
-      } finally {
-        setLoading(false);
-      }
+    const userId = localStorage.getItem('user_id');
+    if (!userId) {
+      setError('No learner session found. Please sign in again.');
+      setLoading(false);
+      return;
     }
 
-    loadDashboardData();
+    Promise.all([getDashboardAnalytics(userId), getRecommendations(userId)])
+      .then(([dashData, recData]) => {
+        setStats(dashData);
+        setRecommendations(recData.recommended_lessons || dashData.recommended_lessons || []);
+        setAccuracyData(
+          (dashData.accuracy_over_time || []).map((p) => ({ day: p.day, accuracy: p.accuracy }))
+        );
+        setLessonsData(
+          (dashData.completion_by_category || []).map((c) => ({ week: c.category, count: c.completed }))
+        );
 
-    // Achievement Badges
-    setBadges([
-      { id: 1, title: '🔥 7-Day Streak', desc: 'Practiced 7 days in a row', unlocked: true },
-      { id: 2, title: '🔤 Alphabet Master', desc: 'Scored >80% on all letters A-Z', unlocked: true },
-      { id: 3, title: '🎯 Sharp Shooter', desc: 'Reached 95% single-gesture confidence', unlocked: true },
-      { id: 4, title: '⚡ Speed Learner', desc: 'Completed 5 lessons in 1 day', unlocked: false },
-      { id: 5, title: '🏆 Top 3 Ranking', desc: 'Ranked in top 3 on class leaderboard', unlocked: false },
-    ]);
+        const streak = dashData.current_streak || 0;
+        const lessons = dashData.lessons_completed || 0;
+        const accuracy = dashData.overall_accuracy_percentage || 0;
+        setBadges([
+          { id: 1, title: '🔥 7-Day Streak', desc: 'Practiced 7 days in a row', unlocked: streak >= 7 },
+          { id: 2, title: '🔤 Alphabet Master', desc: 'Scored >80% on all letters A-Z', unlocked: lessons >= 26 },
+          { id: 3, title: '🎯 Sharp Shooter', desc: 'Reached 95% single-gesture confidence', unlocked: accuracy >= 95 },
+          { id: 4, title: '⚡ Speed Learner', desc: 'Completed 5 lessons in 1 day', unlocked: lessons >= 5 },
+          { id: 5, title: '🏆 Top 3 Ranking', desc: 'Ranked in top 3 on class leaderboard', unlocked: false },
+        ]);
+        setLoading(false);
+      })
+      .catch((err) => {
+        setError(err.message || 'Failed to load dashboard data.');
+        setLoading(false);
+      });
   }, []);
 
   if (loading) {
     return <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>Loading Learner Dashboard...</div>;
+  }
+
+  if (!stats) {
+    return (
+      <div className="card" style={{ padding: '2rem', textAlign: 'center' }}>
+        <p style={{ color: 'var(--danger)', fontWeight: 600 }}>{error || 'Unable to load dashboard.'}</p>
+      </div>
+    );
   }
 
   return (
@@ -96,7 +68,7 @@ export default function Dashboard() {
           <h1 className="page-title">Learner Overview</h1>
         </div>
         <div className="streak-pill card-pop">
-          🔥 <strong>{stats?.current_streak || 7} Day Practice Streak!</strong>
+          🔥 <strong>{stats?.current_streak || 0} Day Practice Streak!</strong>
         </div>
       </div>
 
