@@ -51,6 +51,11 @@ def _uid(prefix):
 
 def _register(role):
     email = f"{_uid(role)}@example.com"
+    if role == "Admin":
+        # Admin accounts are seeded by the platform, never self-registered.
+        from conftest import make_user
+        user = make_user(email, username=f"{role}_{uuid.uuid4().hex[:8]}", role="Admin")
+        return user["email"], user["id"]
     res = client.post(
         "/api/auth/register",
         json={
@@ -133,11 +138,12 @@ def test_team_role_walkthrough_end_to_end():
 
     assign = client.post(
         "/api/instructor/assign-student",
+        headers=_auth(instructor_token),
         json={"instructor_email": instructor_email, "student_email": learner_email},
     )
     assert assign.status_code == 200, assign.text
 
-    students = client.get(f"/api/instructor/students/{instructor_email}")
+    students = client.get(f"/api/instructor/students/{instructor_email}", headers=_auth(instructor_token))
     assert students.status_code == 200 and students.json()["total_students"] >= 1
     assert any(s["email"] == learner_email for s in students.json()["students"])
 

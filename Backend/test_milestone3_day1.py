@@ -51,7 +51,7 @@ def test_milestone1_2_auth_and_profile_flow():
     # 4. Profile Update
     prof_res = client.patch("/api/users/me", json={
         "username": "day1user_updated"
-    })
+    }, headers={"Authorization": f"Bearer {tokens['access_token']}"})
     assert prof_res.status_code == 200
     assert prof_res.json()["username"] == "day1user_updated"
 
@@ -119,14 +119,9 @@ def test_milestone3_notification_service():
 def test_milestone3_bulk_admin_actions():
     """Test Bulk Admin Actions: Bulk Status, Bulk Role, Bulk Delete."""
     import uuid as _uuid
+    from conftest import make_user
     admin_email = f"m3bulkadmin_{_uuid.uuid4().hex[:8]}@example.com"
-    reg = client.post("/api/auth/register", json={
-        "username": "m3bulkadmin",
-        "email": admin_email,
-        "password": "SecurePassword123!",
-        "role": "Admin",
-    })
-    assert reg.status_code == 201, reg.text
+    make_user(admin_email, username=f"m3bulkadmin_{_uuid.uuid4().hex[:6]}", role="Admin")
 
     # 1. Bulk Status Update
     status_res = client.patch("/api/admin/users/bulk-status", json={
@@ -160,6 +155,13 @@ def test_milestone3_bulk_admin_actions():
 
 def test_milestone3_csv_bulk_lesson_upload():
     """Test CSV Bulk Lesson Upload feature."""
+    import uuid as _uuid
+    from conftest import make_user, login_token
+
+    instructor_email = f"m3csv_instructor_{_uuid.uuid4().hex[:8]}@example.com"
+    make_user(instructor_email, username=f"m3csv_instructor_{_uuid.uuid4().hex[:6]}", role="Instructor")
+    bearer = {"Authorization": f"Bearer {login_token(client, instructor_email)}"}
+
     csv_payload = (
         "module_id,title,content_description,expected_gesture,category,difficulty\n"
         "mod_alphabet_101,Bulk CSV Test 1,Test Description 1,GESTURE_1,Phrases,Easy\n"
@@ -168,7 +170,7 @@ def test_milestone3_csv_bulk_lesson_upload():
 
     upload_res = client.post("/api/lessons/bulk-upload-csv", json={
         "csv_content": csv_payload
-    })
+    }, headers=bearer)
     assert upload_res.status_code == 201
     res_data = upload_res.json()
     assert res_data["created_count"] == 2

@@ -87,9 +87,67 @@ def _seed_alphabet_course(db: Session) -> None:
     db.commit()
 
 
-# Seed the Alphabet course into the real database on startup (idempotent).
+WORDS_MODULE_NAME = "American Sign Language: Common Words"
+WORDS_MODULE_DESCRIPTION = (
+    "Common ASL word signs, each a distinct hand gesture learners practice "
+    "alongside the alphabet."
+)
+COMMON_WORD_SIGNS = [
+    ("hello", "Hello", "Wave with an open palm or use the standard HELLO greeting sign."),
+    ("thank", "Thank You", "Touch the fingertips of the flat hand to the chin and move it outward."),
+    ("help", "Help", "Place the flat hand on the other fist and lift upward."),
+    ("love", "Love", "Cross the arms over the chest with fists closed."),
+    ("sorry", "Sorry", "Make a fist and rub it in a circular motion over the chest."),
+    ("again", "Again", "Bend the dominant hand at the wrist palm-down, moving it in an arc."),
+]
+
+
+def _seed_words_course(db: Session) -> None:
+    """Idempotently seed the Common Words course (module + word sign lessons)."""
+    existing = db.query(models.Module).filter(
+        models.Module.module_name == WORDS_MODULE_NAME
+    ).first()
+    if existing is not None:
+        return
+
+    if db.query(models.Course).filter(models.Course.title == WORDS_MODULE_NAME).first() is None:
+        db.add(models.Course(
+            title=WORDS_MODULE_NAME,
+            description=WORDS_MODULE_DESCRIPTION,
+            level="Beginner",
+        ))
+        db.flush()
+
+    course = db.query(models.Course).filter(
+        models.Course.title == WORDS_MODULE_NAME
+    ).one()
+
+    mod = models.Module(
+        course_id=course.id,
+        module_name=WORDS_MODULE_NAME,
+        description=WORDS_MODULE_DESCRIPTION,
+    )
+    db.add(mod)
+    db.flush()
+
+    for gesture, title, description in COMMON_WORD_SIGNS:
+        db.add(models.Lesson(
+            slug=f"word-{gesture}",
+            module_id=mod.id,
+            title=title,
+            description=description,
+            expected_gesture=gesture,
+            category="words",
+            difficulty="medium",
+        ))
+
+    db.commit()
+
+
+# Seed the courses into the real database on startup (idempotent).
 _seed_db = SessionLocal()
 _seed_alphabet_course(_seed_db)
+_seed_words_course(_seed_db)
 _seed_db.close()
 
 

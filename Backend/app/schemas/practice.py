@@ -70,3 +70,5 @@ class PracticeSubmitResponse(BaseModel):
     hand_detected: bool = False
     correct: Optional[bool] = None
     possible_issue: Optional[str] = None
+    overall_accuracy: Optional[float] = None
+    updated_streak: Optional[int] = None

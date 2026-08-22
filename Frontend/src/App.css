@@ -614,3 +614,32 @@ tr:last-child td {
     animation: none !important;
   }
 }
+
+/* Real-event notification toasts (Section E) */
+.toast {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  max-width: 340px;
+  background-color: var(--bg-card, #ffffff);
+  border-left: 4px solid var(--primary, #4f46e5);
+  border-radius: var(--radius-md, 10px);
+  padding: 0.85rem 1rem;
+  box-shadow: var(--shadow-lg, 0 10px 25px rgba(0, 0, 0, 0.12));
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  animation: popupAppear 0.35s ease-out;
+}
+
+.toast strong {
+  font-size: 0.85rem;
+  color: var(--text-main, #0f172a);
+}
+
+.toast span {
+  font-size: 0.8rem;
+  color: var(--text-muted, #64748b);
+  line-height: 1.4;
+}

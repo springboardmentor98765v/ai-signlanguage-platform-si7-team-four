@@ -10,12 +10,15 @@ export function AuthProvider({ children }) {
       try { return JSON.parse(savedUser); } catch (_) {}
     }
     const token = localStorage.getItem('access_token');
-    if (token) {
+    const storedUsername = localStorage.getItem('username');
+    const storedRole = localStorage.getItem('user_role');
+    const storedId = localStorage.getItem('user_id');
+    if (token && storedUsername && storedId) {
       return {
-        user_id: localStorage.getItem('user_id') || 'usr_78910',
-        username: localStorage.getItem('username') || 'Learner User',
-        email: 'student@example.com',
-        role: localStorage.getItem('user_role') || 'Learner',
+        user_id: storedId,
+        username: storedUsername,
+        email: localStorage.getItem('user_email') || '',
+        role: storedRole || 'Learner',
       };
     }
     return null;
@@ -27,12 +30,10 @@ export function AuthProvider({ children }) {
     setLoading(true);
     try {
       const data = await apiLogin(credentials);
-      const userInfo = data.user || {
-        user_id: data.user_id || `usr_${Date.now()}`,
-        username: credentials.email.split('@')[0],
-        email: credentials.email,
-        role: 'Learner',
-      };
+      const userInfo = data.user;
+      if (!userInfo) {
+        throw new Error('Login response did not include user details.');
+      }
 
       localStorage.setItem('access_token', data.access_token);
       localStorage.setItem('user_id', userInfo.user_id);

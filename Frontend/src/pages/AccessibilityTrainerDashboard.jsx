@@ -28,28 +28,7 @@ export default function AccessibilityTrainerDashboard() {
           skillBreakdown: data.skill_breakdown || data.skillBreakdown || [],
         });
       } catch (err) {
-        console.warn('Could not fetch live analytics, using local safe cache:', err);
-        setTrainerData({
-          assignedLearners: 28,
-          activeThisWeek: 22,
-          avgAccuracy: 86.4,
-          certificationsIssued: 15,
-          learners: [
-            { id: 1, name: 'Aarav Patel', level: 'Intermediate', progress: 82, accuracy: 89, status: 'Certified' },
-            { id: 2, name: 'Ananya Sharma', level: 'Beginner', progress: 45, accuracy: 74, status: 'In Assessment' },
-            { id: 3, name: 'Rohan Gupta', level: 'Advanced', progress: 95, accuracy: 96, status: 'Certified' },
-            { id: 4, name: 'Meera Nair', level: 'Beginner', progress: 30, accuracy: 62, status: 'Needs Support' },
-            { id: 5, name: 'Vikram Joshi', level: 'Intermediate', progress: 68, accuracy: 81, status: 'In Assessment' },
-          ],
-          skillBreakdown: [
-            { skill: 'Alphabet Finger-Spelling (A-Z)', score: 91 },
-            { skill: 'Numeric Gestures (1-10)', score: 87 },
-            { skill: 'Dynamic Gesture Signs (J, Z)', score: 72 },
-            { skill: 'Hand-Shape Framing & Stability', score: 84 },
-            { skill: 'Thumb & Palm Alignment', score: 78 },
-          ],
-        });
-        setErrorMsg('Operating with local fallback cache until Backend endpoint is live.');
+        setErrorMsg(err.message || 'Unable to load trainer analytics.');
       } finally {
         setLoading(false);
       }
@@ -57,6 +36,17 @@ export default function AccessibilityTrainerDashboard() {
 
     loadData();
   }, []);
+
+  const getStatusBadgeStyle = (status) => {
+    switch (status) {
+      case 'Certified':
+        return { backgroundColor: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--border-color)' };
+      case 'Needs Support':
+        return { backgroundColor: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--border-color)' };
+      default:
+        return { backgroundColor: 'var(--warning-bg)', color: 'var(--warning)', border: '1px solid var(--border-color)' };
+    }
+  };
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '1rem 0' }}>
@@ -87,7 +77,7 @@ export default function AccessibilityTrainerDashboard() {
           <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
             Active This Week
           </span>
-          <h2 style={{ fontSize: '2.25rem', fontWeight: 800, color: 'var(--success, #10b981)', margin: '0.25rem 0' }}>
+          <h2 style={{ fontSize: '2.25rem', fontWeight: 800, color: 'var(--success)', margin: '0.25rem 0' }}>
             {loading ? '...' : trainerData.activeThisWeek}
           </h2>
           <small style={{ color: 'var(--text-muted)' }}>Engagement rate</small>
@@ -97,7 +87,7 @@ export default function AccessibilityTrainerDashboard() {
           <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
             Avg Posture Accuracy
           </span>
-          <h2 style={{ fontSize: '2.25rem', fontWeight: 800, color: 'var(--warning, #f59e0b)', margin: '0.25rem 0' }}>
+          <h2 style={{ fontSize: '2.25rem', fontWeight: 800, color: 'var(--warning)', margin: '0.25rem 0' }}>
             {loading ? '...' : `${trainerData.avgAccuracy}%`}
           </h2>
           <small style={{ color: 'var(--text-muted)' }}>Across all gesture tests</small>
@@ -107,7 +97,7 @@ export default function AccessibilityTrainerDashboard() {
           <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
             Certifications Issued
           </span>
-          <h2 style={{ fontSize: '2.25rem', fontWeight: 800, color: '#a855f7', margin: '0.25rem 0' }}>
+          <h2 style={{ fontSize: '2.25rem', fontWeight: 800, color: 'var(--primary-text)', margin: '0.25rem 0' }}>
             {loading ? '...' : trainerData.certificationsIssued}
           </h2>
           <small style={{ color: 'var(--text-muted)' }}>Verified through exams</small>
@@ -140,21 +130,15 @@ export default function AccessibilityTrainerDashboard() {
                     <td style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>{learner.name}</td>
                     <td style={{ padding: '0.75rem 0.5rem', color: 'var(--text-muted)' }}>{learner.level}</td>
                     <td style={{ padding: '0.75rem 0.5rem' }}>{learner.progress}%</td>
-                    <td style={{ padding: '0.75rem 0.5rem', fontWeight: 700 }}>{learner.accuracy}%</td>
+                    <td style={{ padding: '0.75rem 0.5rem', fontWeight: 700, color: 'var(--primary)' }}>{learner.accuracy}%</td>
                     <td style={{ padding: '0.75rem 0.5rem' }}>
                       <span
                         style={{
-                          padding: '0.25rem 0.5rem',
-                          borderRadius: '4px',
-                          fontSize: '0.75rem',
+                          padding: '0.25rem 0.55rem',
+                          borderRadius: 'var(--radius-full)',
+                          fontSize: '0.725rem',
                           fontWeight: 700,
-                          backgroundColor:
-                            learner.status === 'Certified'
-                              ? '#065f46'
-                              : learner.status === 'Needs Support'
-                              ? '#7f1d1d'
-                              : '#854d0e',
-                          color: '#fff',
+                          ...getStatusBadgeStyle(learner.status),
                         }}
                       >
                         {learner.status}
@@ -188,7 +172,7 @@ export default function AccessibilityTrainerDashboard() {
                     style={{
                       width: `${item.score}%`,
                       height: '100%',
-                      backgroundColor: item.score > 85 ? 'var(--primary)' : '#f59e0b',
+                      backgroundColor: item.score > 85 ? 'var(--primary)' : 'var(--warning)',
                       borderRadius: '999px',
                       transition: 'width 0.4s ease',
                     }}

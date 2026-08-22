@@ -14,8 +14,8 @@ from predict import predict_with_feedback
 import string
 
 # --- change these every run ---
-CONDITION = "dim_light"
-TESTER = "person2"  # change per person, e.g. "person1", "person2" — needed
+CONDITION = "bright_light"
+TESTER = "person1"  # change per person, e.g. "person1", "person2" — needed
                      # for Day 9's "tested across at least 2 different people"
                      # checkpoint
 
@@ -24,7 +24,7 @@ TESTER = "person2"  # change per person, e.g. "person1", "person2" — needed
 TEST_LABELS = list(string.ascii_uppercase)
 
 LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                         "..", "dataset", "raw", "robustness_log.csv")
+                         "..", "dataset", "raw", "robustness_log_final.csv")
 
 
 def run_session():

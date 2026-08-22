@@ -25,10 +25,10 @@ from sqlalchemy import (
     Index,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from app.db.database import Base, PortableUUID
 from sqlalchemy.orm import relationship
 
-from app.db.database import Base
+UUID = PortableUUID
 
 
 def new_id():
@@ -53,6 +53,8 @@ class User(Base):
         ForeignKey("users.id"),
         nullable=True,
     )
+    reset_token_hash = Column(String(255), nullable=True)
+    reset_token_expires_at = Column(DateTime, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -513,3 +515,38 @@ Index(
     "ix_streaks_current_streak_count",
     Streak.current_streak_count,
 )
+
+
+class TranslationHistory(Base):
+    """Persisted real-time gesture translation log entries."""
+
+    __tablename__ = "translation_history"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
+    user_id = Column(
+        UUID(as_uuid=False),
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+    translated_text = Column(Text, nullable=False)
+    confidence_level = Column(Float, nullable=False, default=0.0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Feedback(Base):
+    """Persisted community feedback / ratings."""
+
+    __tablename__ = "feedback"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
+    user_id = Column(
+        UUID(as_uuid=False),
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+    category = Column(String(50), nullable=False)
+    rating = Column(Integer, nullable=False)
+    comments = Column(Text, nullable=False)
+    submitted_at = Column(DateTime, default=datetime.utcnow)

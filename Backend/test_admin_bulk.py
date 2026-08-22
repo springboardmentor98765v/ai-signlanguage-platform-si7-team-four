@@ -6,14 +6,15 @@ Covers the Day-4 bulk admin APIs:
   - POST /api/admin/bulk-upload-lessons    (CSV bulk lesson upload)
 
 Admin verification is email-based (`?admin_email=` query param), so each test
-registers a fresh admin through the API first. All writes go to the isolated
-temp database from `conftest.py`.
+seeds a fresh admin directly into the isolated temp database (admin accounts
+can no longer self-register through the API).
 """
 
 import uuid
 
 from fastapi.testclient import TestClient
 from app.main import app
+from conftest import make_user
 
 client = TestClient(app)
 
@@ -37,16 +38,8 @@ def _register_user(role: str = "Learner") -> str:
 
 
 def _admin_email() -> str:
-    """Register a fresh admin and return its email."""
-    email = _unique_email()
-    res = client.post("/api/auth/register", json={
-        "username": f"bulkadmin_{uuid.uuid4().hex[:8]}",
-        "email": email,
-        "password": PASSWORD,
-        "role": "Admin",
-    })
-    assert res.status_code == 201, res.text
-    return email
+    """Seed a fresh admin (real row in the temp DB) and return its email."""
+    return make_user(_unique_email(), username=f"bulkadmin_{uuid.uuid4().hex[:8]}", role="Admin")["email"]
 
 
 def _registered_user_email() -> str:

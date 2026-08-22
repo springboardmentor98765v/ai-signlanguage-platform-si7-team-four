@@ -1,70 +1,67 @@
-from fastapi import APIRouter, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import List, Optional
+
+from sqlalchemy.orm import Session
+from sqlalchemy import or_
+
+from app.db.database import get_db
+from app.models.models import Lesson
 
 router = APIRouter(prefix="/api/v1/dictionary", tags=["Sign Dictionary & Vocabulary"])
 
 class DictionarySignResponse(BaseModel):
-    id: int
+    id: str
     sign_name: str
     category: str
     difficulty_level: str
     description: str
     video_url: Optional[str] = None
 
-    class Config:
-        from_attributes = True
 
-# Mock database of sign language dictionary entries
-SIGN_DICTIONARY_DB = [
-    {
-        "id": 1,
-        "sign_name": "Hello",
-        "category": "Greetings",
-        "difficulty_level": "Beginner",
-        "description": "Raise your hand with fingers extended and touch your forehead, then move it slightly outward.",
-        "video_url": "https://example.com/videos/hello.mp4"
-    },
-    {
-        "id": 2,
-        "sign_name": "Thank You",
-        "category": "Common Phrases",
-        "difficulty_level": "Beginner",
-        "description": "Touch your fingertips to your chin and move your hand forward and down toward the person.",
-        "video_url": "https://example.com/videos/thank_you.mp4"
-    },
-    {
-        "id": 3,
-        "sign_name": "Help",
-        "category": "Emergency & Support",
-        "difficulty_level": "Intermediate",
-        "description": "Place one flat hand on top of the other fist and lift both upwards together.",
-        "video_url": "https://example.com/videos/help.mp4"
-    }
-]
-
-# 1. Search or List Dictionary Signs Endpoint
+# 1. Search / list the sign-language dictionary (backed by the real lesson catalog).
 @router.get("/signs", response_model=List[DictionarySignResponse])
-def get_dictionary_signs(search: Optional[str] = Query(None, description="Search term for sign name or category")):
-    """
-    Retrieves all available signs or filters them by name/category query parameters.
-    """
-    if search:
-        filtered = [
-            sign for sign in SIGN_DICTIONARY_DB 
-            if search.lower() in sign["sign_name"].lower() or search.lower() in sign["category"].lower()
-        ]
-        return filtered
-    return SIGN_DICTIONARY_DB
+def list_dictionary_signs(
+    search: Optional[str] = Query(None, max_length=200),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Lesson)
+    if search and search.strip():
+        like = f"%{search.strip()}%"
+        query = query.filter(
+            or_(Lesson.title.ilike(like), Lesson.expected_gesture.ilike(like))
+        )
+    rows = query.order_by(Lesson.title.asc()).all()
+    return [
+        DictionarySignResponse(
+            id=str(lesson.id),
+            sign_name=lesson.title,
+            category=(lesson.category or "general").capitalize(),
+            difficulty_level=(lesson.difficulty or "easy").capitalize(),
+            description=lesson.description or "",
+            video_url=None,
+        )
+        for lesson in rows
+    ]
 
-# 2. Get Specific Sign Details by ID Endpoint
+
+# 2. Fetch a single dictionary sign by its real catalog id.
 @router.get("/signs/{sign_id}", response_model=DictionarySignResponse)
-def get_sign_by_id(sign_id: int):
-    """
-    Retrieves detailed instructions and metadata for a specific sign ID.
-    """
-    for sign in SIGN_DICTIONARY_DB:
-        if sign["id"] == sign_id:
-            return sign
-            
-    raise HTTPException(status_code=404, detail="Sign entry not found in the dictionary.")
+def get_dictionary_sign(sign_id: str, db: Session = Depends(get_db)):
+    lesson = (
+        db.query(Lesson)
+        .filter(
+            or_(Lesson.id == sign_id, Lesson.slug == sign_id)
+        )
+        .first()
+    )
+    if lesson is None:
+        raise HTTPException(status_code=404, detail="Sign not found in the dictionary.")
+    return DictionarySignResponse(
+        id=str(lesson.id),
+        sign_name=lesson.title,
+        category=(lesson.category or "general").capitalize(),
+        difficulty_level=(lesson.difficulty or "easy").capitalize(),
+        description=lesson.description or "",
+        video_url=None,
+    )

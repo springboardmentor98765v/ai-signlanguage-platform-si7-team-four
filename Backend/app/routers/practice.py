@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.services import practice_service
 from app.models import models
+from app.services import notification_service as notifications
 from app.schemas.practice import (
     PracticeSessionResponse,
     PracticeEndResponse,
@@ -12,6 +13,7 @@ from app.schemas.practice import (
 )
 import uuid
 import logging
+from datetime import datetime, timedelta as _timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -138,13 +140,132 @@ def submit_practice_frame(
     if ai_resp.status_code != 200:
         raise HTTPException(status_code=502, detail="AI service returned an unexpected error.")
 
-    ai = ai_resp.json()
+    try:
+        ai = ai_resp.json()
+        if not isinstance(ai, dict):
+            raise ValueError("AI response is not a JSON object")
+        predicted_sign = ai.get("predicted_sign")
+        confidence = float(ai.get("confidence") or 0.0)
+        hand_detected = bool(ai.get("hand_detected", False))
+        correct = ai.get("correct")
+        possible_issue = ai.get("possible_issue")
+    except (ValueError, TypeError) as exc:
+        logger.warning("AI service returned malformed prediction: %s", exc)
+        raise HTTPException(status_code=502, detail="AI service returned a malformed prediction response.")
+
+    # ------------------------------------------------------------------
+    # Persist this practice attempt so dashboards/leaderboards are live.
+    # (Intern 4 Section C: every successful prediction is recorded.)
+    # ------------------------------------------------------------------
+    overall_accuracy = None
+    updated_streak = None
+    try:
+        session = db.query(models.PracticeSession).filter(models.PracticeSession.id == session_id).first()
+
+        if hand_detected and payload.target_letter and predicted_sign:
+            eff_conf = max(0.0, min(float(confidence), 1.0))
+            is_correct = str(predicted_sign).strip().lower() == str(payload.target_letter).strip().lower()
+            if is_correct:
+                overall_accuracy = round(eff_conf * 100.0, 1)
+            else:
+                overall_accuracy = round(max(0.0, 100.0 - eff_conf * 100.0), 1)
+
+            db.add(models.Assessment(
+                session_id=session_id,
+                predicted_sign=str(predicted_sign)[:5],
+                expected_sign=str(payload.target_letter)[:5],
+                confidence=eff_conf,
+                hand_shape_score=overall_accuracy,
+                finger_position_score=overall_accuracy,
+                timing_score=overall_accuracy,
+                overall_accuracy=overall_accuracy,
+                is_correct=bool(is_correct),
+                suggestions=possible_issue,
+            ))
+
+            if session is not None and session.user_id:
+                today = datetime.utcnow().date()
+                streak_row = db.query(models.Streak).filter(models.Streak.user_id == session.user_id).first()
+                if streak_row is None:
+                    streak_row = models.Streak(
+                        user_id=session.user_id,
+                        current_streak_count=1,
+                        longest_streak_count=1,
+                        last_practice_date=datetime.utcnow(),
+                    )
+                    db.add(streak_row)
+                else:
+                    last_date = streak_row.last_practice_date
+                    if last_date is None or last_date.date() != today:
+                        gap_days = (today - last_date.date()).days if last_date else 1
+                        streak_row.current_streak_count = 1 if gap_days > 1 else (streak_row.current_streak_count or 0) + 1
+                        streak_row.longest_streak_count = max(
+                            streak_row.longest_streak_count or 0,
+                            streak_row.current_streak_count or 0,
+                        )
+                        streak_row.last_practice_date = datetime.utcnow()
+                db.flush()
+                updated_streak = streak_row.current_streak_count
+
+                # Refresh the learner's aggregate analytics row.
+                _refresh_analytics_summary(db, session.user_id)
+
+            notifications.create_notification(
+                db,
+                user_id=session.user_id if session is not None else (payload.user_id or "unknown"),
+                title="Practice attempt recorded",
+                message=(
+                    f"Signed '{payload.target_letter}' — score {overall_accuracy:.1f}%."
+                    if overall_accuracy is not None
+                    else "Practice attempt recorded."
+                ),
+                event_type="info",
+            )
+            db.commit()
+
+        if session is not None:
+            practice_service.increment_attempt(db, session_id)
+    except Exception as exc:
+        logger.warning("Could not persist practice attempt: %s", exc)
+        db.rollback()
+
     return PracticeSubmitResponse(
         status="success",
         session_id=session_id,
-        predicted_sign=ai.get("predicted_sign"),
-        confidence=float(ai.get("confidence") or 0.0),
-        hand_detected=bool(ai.get("hand_detected", False)),
-        correct=ai.get("correct"),
-        possible_issue=ai.get("possible_issue"),
+        predicted_sign=predicted_sign,
+        confidence=confidence,
+        hand_detected=hand_detected,
+        correct=correct,
+        possible_issue=possible_issue,
+        overall_accuracy=overall_accuracy,
+        updated_streak=updated_streak,
     )
+
+
+def _refresh_analytics_summary(db, user_id: str) -> None:
+    """Recompute a learner's AnalyticsSummary row from persisted records."""
+    from sqlalchemy import func as _af
+
+    sessions = (
+        db.query(models.PracticeSession)
+        .filter(models.PracticeSession.user_id == user_id, models.PracticeSession.status == "completed")
+        .all()
+    )
+    completed_up_to = {s.id for s in sessions}
+    acc_avg = None
+    if completed_up_to:
+        acc_avg = db.query(_af.avg(models.Assessment.overall_accuracy)).filter(
+            models.Assessment.session_id.in_(completed_up_to)
+        ).scalar()
+
+    distinct_lessons = {s.lesson_id for s in sessions}
+    practice_hours = round(sum((s.duration_seconds or 0.0) for s in sessions) / 3600.0, 2)
+
+    summary = db.query(models.AnalyticsSummary).filter(models.AnalyticsSummary.user_id == user_id).first()
+    if summary is None:
+        summary = models.AnalyticsSummary(user_id=user_id)
+        db.add(summary)
+    summary.overall_accuracy_percentage = round(acc_avg or 0.0, 1)
+    summary.lessons_completed = len(distinct_lessons)
+    summary.practice_hours = practice_hours
+    summary.improvement_rate_percentage = 0.0
