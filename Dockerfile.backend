@@ -34,6 +34,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # PostgreSQL) db layer from Database_Devops so the container connects to the
 # provisioned database instead of the local SQLite file.
 COPY Backend/app ./app
+COPY Backend/predeploy ./predeploy
 COPY Database_Devops/app/db ./app/db
 
 EXPOSE $PORT
