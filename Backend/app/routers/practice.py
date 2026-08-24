@@ -223,6 +223,17 @@ def submit_practice_frame(
             )
             db.commit()
 
+        # Best-effort recommendation refresh after the attempt is safely
+        # persisted, so the learner dashboard reflects it immediately.
+        if session is not None and session.user_id:
+            try:
+                from app.services.recommendation_service import sync_user_recommendations
+
+                sync_user_recommendations(db, session.user_id)
+            except Exception as exc:
+                logger.warning("Could not refresh recommendations: %s", exc)
+                db.rollback()
+
         if session is not None:
             practice_service.increment_attempt(db, session_id)
     except Exception as exc:

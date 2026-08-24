@@ -8,27 +8,18 @@ export default function Dashboard() {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const user = JSON.parse(localStorage.getItem('user_info') || localStorage.getItem('user') || '{}');
 
   useEffect(() => {
     async function loadDashboard() {
       try {
+        // Live per-learner metrics computed from persisted practice records.
         const res = await apiRequest('/api/auth/dashboard/learner');
         setData(res);
       } catch (err) {
-        console.warn('Real dashboard load failed, using local metrics:', err);
-        setData({
-          learner_name: user.username || 'Parvathy K Manoj',
-          accuracy_average: 88.5,
-          completed_lessons: 12,
-          current_streak_days: 5,
-          target_sign: 'A',
-          recent_activities: [
-            { id: 1, sign: 'A', score: 94, date: 'Today' },
-            { id: 2, sign: 'B', score: 86, date: 'Yesterday' },
-            { id: 3, sign: 'C', score: 90, date: '2 days ago' },
-          ],
-        });
+        console.warn('Dashboard load failed:', err);
+        setError('Could not load your dashboard. Please try refreshing.');
+        setData(null);
       } finally {
         setLoading(false);
       }
@@ -58,19 +49,19 @@ export default function Dashboard() {
         <div className="card">
           <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Overall Accuracy</span>
           <p style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--primary)', marginTop: '0.25rem' }}>
-            {data?.accuracy_average || 88}%
+            {data?.accuracy_average ?? 0}%
           </p>
         </div>
         <div className="card">
           <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Lessons Completed</span>
           <p style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--success, #10b981)', marginTop: '0.25rem' }}>
-            {data?.completed_lessons || 12}
+            {data?.completed_lessons ?? 0}
           </p>
         </div>
         <div className="card">
           <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Daily Streak</span>
           <p style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--warning, #f59e0b)', marginTop: '0.25rem' }}>
-            🔥 {data?.current_streak_days || 5} Days
+            🔥 {data?.current_streak_days ?? 0} Days
           </p>
         </div>
       </div>
@@ -87,22 +78,26 @@ export default function Dashboard() {
             </tr>
           </thead>
           <tbody>
-            {(data?.recent_activities || [
-              { id: 1, sign: 'A', score: 94, date: 'Today' },
-              { id: 2, sign: 'B', score: 86, date: 'Yesterday' },
-              { id: 3, sign: 'C', score: 90, date: '2 days ago' },
-            ]).map((act) => (
-              <tr key={act.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                <td style={{ padding: '0.75rem', fontWeight: 700 }}>Sign '{act.sign}'</td>
-                <td style={{ padding: '0.75rem', color: act.score >= 85 ? 'var(--success)' : 'var(--warning)' }}>{act.score}%</td>
-                <td style={{ padding: '0.75rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{act.date}</td>
-                <td style={{ padding: '0.75rem', textAlign: 'right' }}>
-                  <button onClick={() => navigate('/practice')} className="btn-secondary" style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }}>
-                    Retry
-                  </button>
+            {(data?.recent_activities || []).length === 0 ? (
+              <tr>
+                <td colSpan={4} style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  No practice attempts yet — head to Practice to start your first sign!
                 </td>
               </tr>
-            ))}
+            ) : (
+              data.recent_activities.map((act) => (
+                <tr key={act.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                  <td style={{ padding: '0.75rem', fontWeight: 700 }}>Sign '{act.sign}'</td>
+                  <td style={{ padding: '0.75rem', color: act.score >= 85 ? 'var(--success)' : 'var(--warning)' }}>{act.score}%</td>
+                  <td style={{ padding: '0.75rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{act.date}</td>
+                  <td style={{ padding: '0.75rem', textAlign: 'right' }}>
+                    <button onClick={() => navigate('/practice')} className="btn-secondary" style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }}>
+                      Retry
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

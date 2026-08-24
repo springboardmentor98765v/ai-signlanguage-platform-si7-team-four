@@ -50,3 +50,65 @@ def generate_recommendations(attempts: List[dict], db=None, user_id: str | None 
         )
 
     return recommendations
+
+
+def sync_user_recommendations(db, user_id) -> int:
+    """
+    Regenerate a learner's persisted Recommendation rows from their real
+    attempt history (last-3-scores rule per sign, threshold 70).
+
+    Idempotent: performs no writes when the desired set already matches the
+    active rows. Returns the number of active recommendations afterwards.
+    """
+    from sqlalchemy import func as sa_func
+
+    from app.models.models import (
+        Assessment,
+        Lesson,
+        PracticeSession,
+        Recommendation as RecModel,
+    )
+
+    user_id = str(user_id)
+    rows = (
+        db.query(Assessment)
+        .join(PracticeSession, Assessment.session_id == PracticeSession.id)
+        .filter(
+            PracticeSession.user_id == user_id,
+            Assessment.expected_sign.isnot(None),
+        )
+        .order_by(Assessment.created_at.asc())
+        .all()
+    )
+    attempts = [
+        {"sign": str(a.expected_sign), "score": float(a.overall_accuracy or 0.0)}
+        for a in rows
+    ]
+    recs = generate_recommendations(attempts)
+
+    desired = {}
+    for rec in recs:
+        lesson = (
+            db.query(Lesson)
+            .filter(sa_func.lower(Lesson.expected_gesture) == rec["sign"].lower())
+            .first()
+        )
+        if lesson is None:
+            continue
+        desired[str(lesson.id)] = rec["message"]
+
+    active = (
+        db.query(RecModel)
+        .filter(RecModel.user_id == user_id, RecModel.is_active.is_(True))
+        .all()
+    )
+    current = {str(r.lesson_id): r.reason for r in active}
+    if current == desired:
+        return len(desired)
+
+    for row in active:
+        row.is_active = False
+    for lesson_id, reason in desired.items():
+        db.add(RecModel(user_id=user_id, lesson_id=lesson_id, reason=reason))
+    db.commit()
+    return len(desired)

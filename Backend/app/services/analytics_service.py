@@ -143,19 +143,54 @@ def _u(value):
     return str(value)
 
 
+WEAK_LETTER_THRESHOLD = 70.0
+
+
+def _latest_letter_scores(assessments) -> dict:
+    """Latest overall_accuracy per expected_sign (the newest attempt wins)."""
+    latest = {}
+    for a in assessments:
+        if not a.expected_sign or a.overall_accuracy is None:
+            continue
+        key = str(a.expected_sign)
+        prev = latest.get(key)
+        if prev is None or ((prev[1] or _dt.min) < (a.created_at or _dt.min)):
+            latest[key] = (float(a.overall_accuracy), a.created_at)
+    return {k: v[0] for k, v in latest.items()}
+
+
+def _humanize_day(ts) -> str:
+    if ts is None:
+        return ""
+    day = ts.date() if isinstance(ts, _dt) else ts
+    today = _dt.utcnow().date()
+    if day == today:
+        return "Today"
+    if day == today - _td(days=1):
+        return "Yesterday"
+    return day.strftime("%b %d")
+
+
 def get_learner_dashboard(db, user_id: str) -> dict:
     """Returns the exact metric contract the learner Dashboard page renders."""
     user_id_u = _u(user_id)
 
-    sessions = (
+    all_sessions = (
         db.query(PracticeSession)
-        .filter(PracticeSession.user_id == user_id_u, PracticeSession.status == "completed")
+        .filter(PracticeSession.user_id == user_id_u)
         .all()
     )
+    sessions = [s for s in all_sessions if s.status == "completed"]
     completed_count = len(sessions)
-    practice_hours = round(
-        sum(s.duration_seconds or 0.0 for s in sessions) / 3600.0, 2
-    )
+
+    total_seconds = sum(s.duration_seconds or 0.0 for s in all_sessions)
+    for s in all_sessions:
+        if s.status != "completed" and s.started_at:
+            # Open sessions still count toward time-on-task, capped at 2h so a
+            # forgotten browser tab cannot inflate the number indefinitely.
+            end = s.ended_at or _dt.utcnow()
+            total_seconds += min(max((end - s.started_at).total_seconds(), 0.0), 7200.0)
+    practice_hours = round(total_seconds / 3600.0, 2)
 
     assessments = []
     for s in sessions:
@@ -163,39 +198,31 @@ def get_learner_dashboard(db, user_id: str) -> dict:
 
     # Overall accuracy: latest per-letter result, averaged. If the user has no
     # completed assessments yet, fall back to the persisted summary row.
-    overall_accuracy = 0.0
-    by_letter = {}
-    for a in assessments:
-        if a.expected_sign and a.overall_accuracy is not None:
-            key = a.expected_sign
-            if key not in by_letter or (by_letter[key][1] or _dt.min) < (a.created_at or _dt.min):
-                by_letter[key] = (a.overall_accuracy, a.created_at)
-    if by_letter:
-        overall_accuracy = round(sum(v[0] for v in by_letter.values()) / len(by_letter), 1)
+    letter_scores = _latest_letter_scores(assessments)
+    summary = db.query(AnalyticsSummary).filter(AnalyticsSummary.user_id == user_id_u).first()
+    if letter_scores:
+        overall_accuracy = round(sum(letter_scores.values()) / len(letter_scores), 1)
     else:
-        summary = db.query(AnalyticsSummary).filter(AnalyticsSummary.user_id == user_id_u).first()
         overall_accuracy = summary.overall_accuracy_percentage if summary else 0.0
 
     # Distinct lessons the user has completed.
     distinct_lessons = {s.lesson_id for s in sessions}
     lessons_completed = len(distinct_lessons)
 
-    # Improvement rate: week-over-week change in average assessment accuracy.
+    # Improvement rate: prefer the persisted rate; otherwise compute the
+    # second-half vs first-half change from this learner's real score history.
     improvement_rate = 0.0
-    summary = db.query(AnalyticsSummary).filter(AnalyticsSummary.user_id == user_id_u).first()
-    if summary is not None and summary.improvement_rate_percentage:
-        improvement_rate = summary.improvement_rate_percentage
+    persisted_rate = summary.improvement_rate_percentage if summary else None
+    if persisted_rate:
+        improvement_rate = persisted_rate
     else:
         completed_acc = [a.overall_accuracy for a in assessments if a.overall_accuracy is not None]
-        if completed_acc:
-            cutoff = _dt.utcnow() - _td(days=7)
-            recent = [x for x in completed_acc]
-            if len(recent) >= 4:
-                second_half = recent[len(recent) // 2:]
-                first_half = recent[: len(recent) // 2]
-                avg1 = sum(first_half) / len(first_half)
-                avg2 = sum(second_half) / len(second_half)
-                improvement_rate = round(avg2 - avg1, 1)
+        if len(completed_acc) >= 4:
+            first_half = completed_acc[: len(completed_acc) // 2]
+            second_half = completed_acc[len(completed_acc) // 2 :]
+            avg_first = sum(first_half) / len(first_half)
+            avg_second = sum(second_half) / len(second_half)
+            improvement_rate = round(avg_second - avg_first, 1)
 
     # Current streak (from the persisted streaks table).
     current_streak = 0
@@ -216,21 +243,41 @@ def get_learner_dashboard(db, user_id: str) -> dict:
         for day, v in sorted(day_scores.items())
     ][-7:]
 
-    # Lessons completed grouped by category.
+    # Lessons completed grouped by category, against the real catalog totals.
+    all_lessons = db.query(Lesson).all()
+    lesson_map = {_u(l.id): l for l in all_lessons}
+
     category_totals = {}
-    category_done = {}
+    for lesson in all_lessons:
+        cat = (lesson.category or "general").capitalize()
+        category_totals[cat] = category_totals.get(cat, 0) + 1
+
+    completed_ids_by_cat = {}
     for s in sessions:
-        lesson = db.query(Lesson).filter(Lesson.id == s.lesson_id).first()
+        lesson = lesson_map.get(_u(s.lesson_id)) if s.lesson_id else None
         if lesson is None:
             continue
         cat = (lesson.category or "general").capitalize()
-        category_totals[cat] = category_totals.get(cat, 0) + 1
-        category_done[cat] = category_done.get(cat, 0) + 1
+        completed_ids_by_cat.setdefault(cat, set()).add(_u(s.lesson_id))
+
     completion_by_category = [
-        {"category": c, "completed": done, "total": done} for c, done in sorted(category_done.items())
+        {
+            "category": cat,
+            "completed": len(completed_ids_by_cat.get(cat, set())),
+            "total": total,
+        }
+        for cat, total in sorted(category_totals.items())
     ]
 
-    # Live recommendations persisted for this user.
+    # Live recommendations persisted for this user. Regenerated from the
+    # learner's real attempt history so the list is never a stale stub.
+    try:
+        from app.services.recommendation_service import sync_user_recommendations
+
+        sync_user_recommendations(db, user_id_u)
+    except Exception:
+        db.rollback()
+
     rec_rows = (
         db.query(Recommendation)
         .filter(Recommendation.user_id == user_id_u, Recommendation.is_active.is_(True))
@@ -238,7 +285,7 @@ def get_learner_dashboard(db, user_id: str) -> dict:
     )
     recommended_lessons = []
     for rec in rec_rows:
-        lesson = db.query(Lesson).filter(Lesson.id == rec.lesson_id).first()
+        lesson = lesson_map.get(_u(rec.lesson_id))
         if lesson is None:
             continue
         recommended_lessons.append(
@@ -250,6 +297,35 @@ def get_learner_dashboard(db, user_id: str) -> dict:
             }
         )
 
+    # Next suggested sign: the learner's weakest practiced sign, or the first
+    # alphabet lesson they have not touched yet.
+    practiced_ids = {_u(s.lesson_id) for s in sessions if s.lesson_id}
+    if letter_scores:
+        target_sign = min(letter_scores, key=letter_scores.get)
+    else:
+        target_sign = "A"
+        for lesson in all_lessons:
+            if (lesson.category or "").lower() != "alphabet":
+                continue
+            if _u(lesson.id) not in practiced_ids:
+                target_sign = (lesson.expected_gesture or "A")[:5]
+                break
+
+    recent_rows = sorted(
+        (a for a in assessments if a.created_at),
+        key=lambda a: a.created_at,
+        reverse=True,
+    )[:8]
+    recent_activities = [
+        {
+            "id": _u(a.id),
+            "sign": str(a.expected_sign)[:5] if a.expected_sign else "?",
+            "score": round(float(a.overall_accuracy or 0.0), 1),
+            "date": _humanize_day(a.created_at),
+        }
+        for a in recent_rows
+    ]
+
     return {
         "user_id": user_id_u,
         "overall_accuracy_percentage": overall_accuracy,
@@ -260,6 +336,8 @@ def get_learner_dashboard(db, user_id: str) -> dict:
         "accuracy_over_time": accuracy_over_time,
         "completion_by_category": completion_by_category,
         "recommended_lessons": recommended_lessons,
+        "target_sign": target_sign,
+        "recent_activities": recent_activities,
     }
 
 
@@ -281,20 +359,67 @@ def _consecutive_days(dates) -> int:
 
 
 def get_learner_analytics_db(db, learner_id: str) -> dict:
-    """DB-backed replacement for the placeholder get_learner_analytics()."""
+    """DB-backed learner analytics: live averages, weak letters, weekly trends."""
+    user_id_u = _u(learner_id)
     dash = get_learner_dashboard(db, learner_id)
+
+    rows = (
+        db.query(Assessment)
+        .join(PracticeSession, Assessment.session_id == PracticeSession.id)
+        .filter(
+            PracticeSession.user_id == user_id_u,
+            Assessment.created_at.isnot(None),
+            Assessment.overall_accuracy.isnot(None),
+        )
+        .order_by(Assessment.created_at.asc())
+        .all()
+    )
+
+    weekly_scores = {}
+    weekly_letter_scores = {}
+    for a in rows:
+        iso = a.created_at.isocalendar()
+        week_key = f"{iso[0]}-W{iso[1]:02d}"
+        weekly_scores.setdefault(week_key, []).append(float(a.overall_accuracy))
+        letter = str(a.expected_sign or "?")
+        weekly_letter_scores.setdefault(week_key, {}).setdefault(letter, []).append(
+            float(a.overall_accuracy)
+        )
+
+    weekly_accuracy = {
+        week: round(sum(values) / len(values), 1)
+        for week, values in sorted(weekly_scores.items())
+    }
+
+    weekly_improvement_rate = {}
+    previous = None
+    for week, acc in weekly_accuracy.items():
+        weekly_improvement_rate[week] = None if previous is None else round(acc - previous, 1)
+        previous = acc
+
+    weekly_weak_letters = {
+        week: sorted(
+            letter
+            for letter, scores in letters.items()
+            if sum(scores) / len(scores) < WEAK_LETTER_THRESHOLD
+        )
+        for week, letters in weekly_letter_scores.items()
+    }
+
+    weak_letters = sorted(
+        letter
+        for letter, score in _latest_letter_scores(rows).items()
+        if score < WEAK_LETTER_THRESHOLD
+    )
+
     return {
         "learner_id": learner_id,
         "average_accuracy": dash["overall_accuracy_percentage"],
         "lessons_completed": dash["lessons_completed"],
-        "weak_letters": [
-            rec["expected_gesture"]
-            for rec in dash["recommended_lessons"]
-            if rec.get("expected_gesture")
-        ],
-        "weekly_accuracy": {},
-        "weekly_improvement_rate": {},
-        "weekly_weak_letters": {},
+        "weak_letters": weak_letters,
+        "weekly_accuracy": weekly_accuracy,
+        "weekly_improvement_rate": weekly_improvement_rate,
+        "weekly_weak_letters": weekly_weak_letters,
     }
 
 
