@@ -48,6 +48,10 @@ def _apply_schema_migrations():
                     conn.execute("ALTER TABLE modules ADD COLUMN description TEXT")
                 if "created_at" not in module_cols:
                     conn.execute("ALTER TABLE modules ADD COLUMN created_at DATETIME")
+
+                cert_cols = {row[1] for row in conn.execute("PRAGMA table_info(certificates)")}
+                if "lesson_id" not in cert_cols:
+                    conn.execute("ALTER TABLE certificates ADD COLUMN lesson_id VARCHAR(36)")
         except Exception:
             pass
     else:
@@ -81,6 +85,12 @@ def _apply_schema_migrations():
             if "title" not in notif_cols:
                 with engine.begin() as conn:
                     conn.execute(sa_text("ALTER TABLE notifications ADD COLUMN title VARCHAR(200) NOT NULL DEFAULT ''"))
+
+        if insp.has_table("certificates"):
+            cert_cols = {c["name"] for c in insp.get_columns("certificates")}
+            if "lesson_id" not in cert_cols:
+                with engine.begin() as conn:
+                    conn.execute(sa_text("ALTER TABLE certificates ADD COLUMN lesson_id UUID"))
 
 
 _apply_schema_migrations()

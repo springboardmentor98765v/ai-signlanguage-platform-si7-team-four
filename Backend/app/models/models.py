@@ -256,6 +256,9 @@ class Certificate(Base):
     overall_score = Column(Float, nullable=False)
     pdf_url = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    # Task/lesson this certificate was earned from (nullable for legacy rows
+    # and for course-level certificates that are not tied to a single lesson).
+    lesson_id = Column(UUID(as_uuid=False), nullable=True)
 
     user = relationship("User", back_populates="certificates")
 

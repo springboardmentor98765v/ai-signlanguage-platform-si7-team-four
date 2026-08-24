@@ -198,7 +198,8 @@ def login_user(
     summary="Learner Dashboard (RBAC: Learner/Admin)",
     description=(
         "Role-protected dashboard. Requires a valid Bearer access token with a role "
-        "of 'Learner' or 'Admin'. Returns stub metrics for the learner."
+        "of 'Learner' or 'Admin'. All metrics are computed live from the learner's "
+        "persisted practice/assessment records."
     ),
 )
 def get_learner_dashboard(
@@ -214,6 +215,13 @@ def get_learner_dashboard(
     metrics = _real_dash(db, token_data["user_id"])
     return {
         "message": f"Welcome to the specialized Learner Dashboard, {token_data['username']}!",
+        "learner_name": token_data["username"],
+        "accuracy_average": metrics["overall_accuracy_percentage"],
+        "completed_lessons": metrics["lessons_completed"],
+        "current_streak_days": metrics["current_streak"],
+        "target_sign": metrics.get("target_sign", "A"),
+        "recent_activities": metrics.get("recent_activities", []),
+        # Legacy aliases for older clients.
         "accuracy_metric": metrics["overall_accuracy_percentage"],
         "lessons_completed": metrics["lessons_completed"],
     }
