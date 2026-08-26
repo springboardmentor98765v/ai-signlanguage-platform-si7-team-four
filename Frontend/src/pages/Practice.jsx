@@ -3,6 +3,38 @@ import { useSearchParams } from 'react-router-dom';
 import { API_BASE_URL, issueTaskCertificate, downloadCertificateFile } from '../services/api';
 
 // ============================================================================
+// ASL Gesture Reference Guide
+// ============================================================================
+const GESTURE_GUIDES = {
+  A: { desc: 'Fist with thumb alongside hand', viewBox: '0 0 100 100', path: 'M30 80 L30 30 L35 25 L40 25 L45 25 L50 25 L55 25 L60 30 L65 30 L65 80 L60 85 L35 85 Z' },
+  B: { desc: 'Four fingers up, thumb tucked', viewBox: '0 0 100 100', path: 'M30 80 L30 25 L35 20 L40 15 L45 15 L50 15 L55 15 L60 20 L65 25 L65 45 L60 45 L55 40 L50 40 L45 40 L40 40 L35 45 L30 45 Z' },
+  C: { desc: 'Curved hand like holding a ball', viewBox: '0 0 100 100', path: 'M35 20 Q25 20 25 35 L25 60 Q25 75 40 80 L60 80 Q75 75 75 60 L75 35 Q75 20 60 20 L55 20 Q50 18 45 20 L35 20 Z M35 30 Q30 30 30 40 L30 55 Q30 65 40 68 L55 68 Q65 65 65 55 L65 40 Q65 30 55 30 L35 30 Z' },
+  D: { desc: 'Index finger up, other fingers touch thumb', viewBox: '0 0 100 100', path: 'M45 85 L45 20 L50 15 L55 15 L58 20 L58 45 L65 40 L68 45 L58 55 L58 80 L55 85 L48 85 Z M35 50 L55 50 L55 60 L50 60 L40 58 Q35 55 35 50 Z' },
+  E: { desc: 'All fingers curled down to thumb', viewBox: '0 0 100 100', path: 'M30 25 L65 25 L70 30 L70 40 L65 45 L55 50 L65 55 L65 60 L70 60 L70 80 L65 85 L35 85 L30 80 L30 30 Z M35 35 L55 35 L55 45 L35 45 Z M35 55 L55 55 L55 65 L40 65 Q35 62 35 55 Z' },
+  F: { desc: 'OK sign with three fingers up', viewBox: '0 0 100 100', path: 'M30 80 L30 30 L35 25 L40 25 L45 25 L50 25 L55 25 L60 30 L60 80 L55 85 L35 85 Z M42 45 Q42 38 50 38 Q58 38 58 45 Q58 52 50 52 Q42 52 42 45 Z M62 25 L62 30 L67 25 L67 20 L62 20 Z' },
+  G: { desc: 'Point sideways, thumb up', viewBox: '0 0 100 100', path: 'M30 80 L30 40 L35 35 L60 35 L70 40 L70 50 L60 50 L55 50 L55 80 L50 85 L35 85 Z M35 45 L50 45 L50 75 L35 75 Z M60 38 L65 35 L68 38 L68 45 L65 48 L60 45 Z' },
+  H: { desc: 'Two fingers pointing sideways', viewBox: '0 0 100 100', path: 'M30 80 L30 30 L35 25 L45 25 L50 30 L50 45 L55 40 L70 40 L70 30 L75 25 L80 30 L80 80 L75 85 L60 85 L55 80 L55 55 L50 55 L50 80 L45 85 L35 85 Z' },
+  I: { desc: 'Pinky up, other fingers closed', viewBox: '0 0 100 100', path: 'M30 80 L30 30 L35 25 L55 25 L60 30 L60 80 L55 85 L35 85 Z M35 35 L55 35 L55 50 L35 50 Z M55 20 L55 25 L60 20 L65 15 L65 10 L60 10 L58 15 Z' },
+  J: { desc: 'Pinky up with hook motion', viewBox: '0 0 100 100', path: 'M30 80 L30 30 L35 25 L55 25 L60 30 L60 45 L55 50 L55 60 L60 70 Q65 80 55 85 L40 85 Q30 85 28 75 L55 75 Z M35 35 L55 35 L55 45 L35 45 Z' },
+  K: { desc: 'Peace sign with thumb between', viewBox: '0 0 100 100', path: 'M30 80 L30 50 L35 45 L50 45 L50 80 L45 85 L35 85 Z M40 50 L50 50 L50 75 L40 75 Z M50 45 L55 20 L60 15 L65 20 L60 30 L55 40 L50 45 Z M55 45 L60 45 L70 30 L75 25 L78 30 L72 42 L62 52 L55 55 Z' },
+  L: { desc: 'L-shape with index and thumb', viewBox: '0 0 100 100', path: 'M35 85 L35 30 L40 25 L50 25 L55 30 L55 60 L75 60 L80 55 L80 45 L75 40 L55 40 L55 25 L50 20 L40 20 L35 25 L35 85 Z M40 35 L50 35 L50 80 L40 80 Z M60 50 L75 50 L75 45 L60 45 Z' },
+  M: { desc: 'Three fingers over thumb', viewBox: '0 0 100 100', path: 'M25 80 L25 25 L30 20 L40 20 L45 25 L45 80 L40 85 L30 85 Z M40 25 L50 25 L50 80 L45 85 L40 85 L40 80 L40 25 Z M50 25 L60 25 L65 30 L65 80 L60 85 L50 85 L50 80 L50 25 Z M65 35 L75 25 L80 20 L82 25 L75 35 L75 80 L70 85 L65 85 L65 80 L65 35 Z' },
+  N: { desc: 'Two fingers over thumb', viewBox: '0 0 100 100', path: 'M25 80 L25 25 L30 20 L42 20 L48 25 L48 80 L43 85 L30 85 Z M43 25 L55 25 L55 80 L50 85 L43 85 L43 80 L43 25 Z M55 25 L65 25 L70 30 L70 80 L65 85 L55 85 L55 80 L55 25 Z M70 35 L78 25 L82 22 L84 27 L77 38 L77 80 L72 85 L68 85 L68 80 L70 35 Z' },
+  O: { desc: 'Fingers curved to touch thumb', viewBox: '0 0 100 100', path: 'M40 20 Q25 20 25 40 L25 60 Q25 80 40 85 L60 85 Q75 80 75 60 L75 40 Q75 20 60 20 L55 20 Q50 18 45 20 L40 20 Z M40 30 Q33 30 33 42 L33 58 Q33 70 40 72 L60 72 Q67 70 67 58 L67 42 Q67 30 60 30 L40 30 Z' },
+  P: { desc: 'Like K but pointing down', viewBox: '0 0 100 100', path: 'M35 20 L35 55 L30 60 L30 80 L60 80 L60 55 L55 50 L55 20 L50 15 L40 15 L35 20 Z M40 25 L50 25 L50 45 L40 45 Z M55 55 L65 70 L70 75 L75 72 L70 65 L60 55 L55 55 Z M55 45 L60 50 L70 40 L75 35 L72 30 L62 40 L55 48 Z' },
+  Q: { desc: 'Hook shape pointing down', viewBox: '0 0 100 100', path: 'M65 20 L65 55 L70 60 Q78 72 70 82 L55 88 Q42 90 35 80 L35 70 L40 68 Q45 75 55 75 L65 70 L65 55 L65 20 L60 15 L50 15 L45 20 L45 65 L50 65 L50 25 L55 20 L65 20 Z' },
+  R: { desc: 'Two fingers crossed', viewBox: '0 0 100 100', path: 'M30 80 L30 25 L35 20 L50 20 L55 25 L55 80 L50 85 L35 85 Z M35 30 L50 30 L50 75 L35 75 Z M55 25 L60 20 L70 35 L65 40 L55 35 L55 30 Z M55 35 L65 45 L75 35 L78 38 L68 50 L55 42 L55 80 L50 85 L35 85 Z' },
+  S: { desc: 'Fist with thumb over fingers', viewBox: '0 0 100 100', path: 'M28 35 L65 35 L70 40 L70 50 L70 60 L65 65 L55 70 L65 75 L65 80 L35 80 L30 75 L30 40 Z M33 43 L60 43 L60 50 L33 50 Z M33 55 L60 55 L60 62 L33 62 Z M30 30 L65 30 L70 35 L28 35 Z' },
+  T: { desc: 'Fist with thumb between index and middle', viewBox: '0 0 100 100', path: 'M28 35 L65 35 L70 40 L70 50 L70 60 L65 65 L55 70 L65 75 L65 80 L35 80 L30 75 L30 40 Z M33 43 L55 43 L55 50 L33 50 Z M55 43 L62 43 L62 50 L55 50 Z M33 55 L60 55 L60 62 L33 62 Z M28 30 L45 30 L45 35 L40 35 L40 43 L35 43 L35 35 L28 35 Z' },
+  U: { desc: 'Index and middle fingers up together', viewBox: '0 0 100 100', path: 'M30 80 L30 25 L35 20 L55 20 L60 25 L60 80 L55 85 L35 85 Z M35 30 L55 30 L55 75 L35 75 Z M55 20 L60 15 L65 15 L68 20 L63 30 L55 30 Z' },
+  V: { desc: 'Peace sign - two fingers spread', viewBox: '0 0 100 100', path: 'M30 80 L30 45 L35 40 L50 40 L55 45 L55 80 L50 85 L35 85 Z M35 50 L50 50 L50 75 L35 75 Z M50 40 L55 15 L58 10 L63 15 L58 25 L55 35 L50 40 Z M58 40 L62 35 L70 15 L75 10 L78 15 L72 28 L63 42 L58 45 Z' },
+  W: { desc: 'Three fingers spread up', viewBox: '0 0 100 100', path: 'M25 80 L25 40 L30 35 L50 35 L55 40 L55 80 L50 85 L30 85 Z M30 45 L50 45 L50 75 L30 75 Z M50 35 L55 15 L58 10 L63 15 L58 28 L55 35 Z M55 35 L60 15 L65 10 L70 15 L65 28 L60 38 L55 40 Z M60 38 L65 20 L70 15 L75 20 L70 32 L65 40 L60 42 Z' },
+  X: { desc: 'Index finger crooked like a hook', viewBox: '0 0 100 100', path: 'M30 80 L30 30 L35 25 L55 25 L60 30 L60 45 L55 40 L55 35 L50 35 L50 40 L55 50 L60 55 L60 80 L55 85 L35 85 Z M35 35 L50 35 L50 75 L35 75 Z' },
+  Y: { desc: 'Thumb and pinky extended', viewBox: '0 0 100 100', path: 'M40 80 L40 30 L35 25 L55 25 L60 30 L60 80 L55 85 L45 85 Z M45 30 L55 30 L55 75 L45 75 Z M35 25 L30 20 L22 15 L18 18 L25 28 L35 35 L35 25 Z M60 25 L65 20 L72 12 L75 15 L70 25 L60 35 L60 30 Z' },
+  Z: { desc: 'Index finger draws Z in air', viewBox: '0 0 100 100', path: 'M25 20 L75 20 L75 28 L25 80 L75 80 L75 88 L20 88 L20 80 L75 28 L25 28 L25 20 Z M30 28 L70 28 L30 80 L70 80 Z' },
+};
+
+// ============================================================================
 // Reusable Spring-Bounce Popup Modal Component
 // ============================================================================
 function PopupModal({ isOpen, onClose, title, message, badgeIcon = '🎉', actions = null }) {
@@ -27,6 +59,88 @@ function PopupModal({ isOpen, onClose, title, message, badgeIcon = '🎉', actio
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// Gesture Reference Card Component
+// ============================================================================
+function GestureReference({ letter, compact = false }) {
+  const guide = GESTURE_GUIDES[letter];
+  if (!guide) return null;
+
+  if (compact) {
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.65rem',
+        padding: '0.5rem 0.75rem',
+        backgroundColor: 'var(--table-header-bg)',
+        borderRadius: 'var(--radius-md)',
+        border: '1px solid var(--border-color)',
+        marginBottom: '0.75rem',
+      }}>
+        <div style={{
+          width: '40px',
+          height: '40px',
+          borderRadius: '50%',
+          backgroundColor: 'var(--primary)',
+          color: '#fff',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '1.15rem',
+          fontWeight: 800,
+          flexShrink: 0,
+        }}>
+          {letter}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>
+            Reference: Sign '{letter}'
+          </p>
+          <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {guide.desc}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      padding: '1rem',
+      backgroundColor: 'var(--table-header-bg)',
+      borderRadius: 'var(--radius-md)',
+      border: '2px solid var(--primary)',
+      textAlign: 'center',
+    }}>
+      <div style={{
+        width: '70px',
+        height: '70px',
+        borderRadius: '50%',
+        backgroundColor: 'var(--primary)',
+        color: '#fff',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: '2rem',
+        fontWeight: 800,
+        margin: '0 auto 0.5rem',
+      }}>
+        {letter}
+      </div>
+      <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>
+        ASL Sign '{letter}'
+      </p>
+      <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '0.25rem 0 0' }}>
+        {guide.desc}
+      </p>
+      <svg viewBox={guide.viewBox} style={{ width: '100%', maxWidth: '120px', height: 'auto', marginTop: '0.5rem' }}>
+        <path d={guide.path} fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      </svg>
     </div>
   );
 }
@@ -371,6 +485,18 @@ export default function Practice() {
     if (isCameraOn) setIsTimerActive(true);
   };
 
+  const getScoreColor = (confidence) => {
+    if (confidence >= 80) return 'var(--success)';
+    if (confidence >= 50) return 'var(--warning)';
+    return 'var(--danger)';
+  };
+
+  const getScoreLabel = (confidence) => {
+    if (confidence >= 80) return 'Excellent Match';
+    if (confidence >= 50) return 'Good Progress';
+    return 'Keep Practicing';
+  };
+
   return (
     <div>
       {/* Hidden processing canvas for base64 extraction */}
@@ -487,6 +613,9 @@ export default function Practice() {
             </div>
           </div>
 
+          {/* Reference Gesture Panel (compact) */}
+          <GestureReference letter={selectedLetter} compact />
+
           {/* Video Viewport Frame */}
           <div style={{ 
             position: 'relative', 
@@ -569,16 +698,46 @@ export default function Practice() {
             </div>
           </div>
 
-          {/* Score Reveal Area */}
+          {/* Score Reveal Area with Color-Coded Badge */}
           <div style={{ textAlign: 'center', padding: '1rem', backgroundColor: 'var(--table-header-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: '1.25rem' }}>
             <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Confidence Score</p>
-            <span
-              key={prediction ? `${prediction.confidence}-${attemptCount}` : 'initial'}
-              className="score-reveal"
-              style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--primary)', display: 'inline-block' }}
-            >
-              {prediction ? `${prediction.confidence}%` : '0%'}
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', marginTop: '0.35rem' }}>
+              <span
+                key={prediction ? `${prediction.confidence}-${attemptCount}` : 'initial'}
+                className="score-reveal"
+                style={{ fontSize: '2.5rem', fontWeight: 800, color: prediction ? getScoreColor(prediction.confidence) : 'var(--primary)', display: 'inline-block' }}
+              >
+                {prediction ? `${prediction.confidence}%` : '0%'}
+              </span>
+              {prediction && prediction.confidence > 0 && (
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.3rem',
+                  padding: '0.3rem 0.75rem',
+                  borderRadius: '999px',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  color: '#fff',
+                  backgroundColor: getScoreColor(prediction.confidence),
+                  border: 'none',
+                }}>
+                  {prediction.confidence >= 80 ? '⭐' : prediction.confidence >= 50 ? '📈' : '💪'}
+                  {' '}{getScoreLabel(prediction.confidence)}
+                </span>
+              )}
+            </div>
+            {prediction && (
+              <div style={{ marginTop: '0.5rem', width: '100%', height: '8px', backgroundColor: 'var(--border-color)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
+                <div style={{
+                  width: `${prediction.confidence}%`,
+                  height: '100%',
+                  backgroundColor: getScoreColor(prediction.confidence),
+                  borderRadius: 'var(--radius-full)',
+                  transition: 'width 0.6s ease, background-color 0.3s ease',
+                }} />
+              </div>
+            )}
           </div>
 
           {/* Gesture Diagnostics Breakdown */}
@@ -627,6 +786,54 @@ export default function Practice() {
                 alt="Captured gesture frame"
                 style={{ width: '100%', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', objectFit: 'contain', maxHeight: '220px' }}
               />
+            </div>
+          )}
+
+          {/* Side-by-Side Comparison */}
+          {capturedFrame && prediction && (
+            <div style={{ marginTop: '1rem', padding: '1rem', backgroundColor: 'var(--table-header-bg)', borderRadius: 'var(--radius-md)', border: '2px solid var(--border-color)' }}>
+              <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.75rem', textAlign: 'center' }}>
+                Side-by-Side Comparison
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                <div style={{ textAlign: 'center' }}>
+                  <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '0.35rem' }}>
+                    Reference
+                  </span>
+                  <div style={{ border: '2px solid var(--primary)', borderRadius: 'var(--radius-md)', overflow: 'hidden', backgroundColor: '#0f172a' }}>
+                    <GestureReference letter={selectedLetter} />
+                  </div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '0.35rem' }}>
+                    Your Capture
+                  </span>
+                  <div style={{ border: '2px solid var(--border-color)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+                    <img
+                      src={capturedFrame}
+                      alt="Captured gesture frame"
+                      style={{ width: '100%', objectFit: 'cover', maxHeight: '160px', display: 'block' }}
+                    />
+                  </div>
+                </div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <p style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', margin: '0 0 0.35rem' }}>
+                  Match Score
+                </p>
+                <div style={{ width: '100%', height: '12px', backgroundColor: 'var(--border-color)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
+                  <div style={{
+                    width: `${prediction.confidence}%`,
+                    height: '100%',
+                    backgroundColor: getScoreColor(prediction.confidence),
+                    borderRadius: 'var(--radius-full)',
+                    transition: 'width 0.6s ease, background-color 0.3s ease',
+                  }} />
+                </div>
+                <p style={{ fontSize: '0.8rem', fontWeight: 800, color: getScoreColor(prediction.confidence), marginTop: '0.35rem' }}>
+                  {prediction.confidence}% — {getScoreLabel(prediction.confidence)}
+                </p>
+              </div>
             </div>
           )}
         </div>

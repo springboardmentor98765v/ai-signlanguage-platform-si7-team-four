@@ -306,3 +306,43 @@ export async function getInstructorStudents(instructorEmail) {
     { method: 'GET' }
   );
 }
+
+// -------------------------------------------------------------------
+// 9) Lesson Completion APIs
+// -------------------------------------------------------------------
+
+export async function getUserCompletions(userId) {
+  return await apiRequest(`/api/lesson-completions/user/${encodeURIComponent(userId)}`, { method: 'GET' });
+}
+
+export async function getCompletionSummary(userId) {
+  return await apiRequest(`/api/lesson-completions/summary/${encodeURIComponent(userId)}`, { method: 'GET' });
+}
+
+export async function markLessonComplete(lessonId, score = 0) {
+  return await apiRequest('/api/lesson-completions/mark', {
+    method: 'POST',
+    body: JSON.stringify({ lesson_id: lessonId, score }),
+  });
+}
+
+// -------------------------------------------------------------------
+// 10) Lesson CRUD (instructor)
+// -------------------------------------------------------------------
+
+export async function createLesson(lessonData) {
+  return await apiRequest('/api/lessons', {
+    method: 'POST',
+    body: JSON.stringify(lessonData),
+  });
+}
+
+export async function getAllLessons(params = {}) {
+  const qs = new URLSearchParams({ limit: '200', ...params }).toString();
+  const data = await apiRequest(`/api/lessons?${qs}`, { method: 'GET' });
+  return data?.data || (Array.isArray(data) ? data : []);
+}
+
+export async function deleteLesson(lessonId) {
+  return await apiRequest(`/api/lessons/${encodeURIComponent(lessonId)}`, { method: 'DELETE' });
+}

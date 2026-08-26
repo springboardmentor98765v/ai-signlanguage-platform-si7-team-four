@@ -553,3 +553,28 @@ class Feedback(Base):
     rating = Column(Integer, nullable=False)
     comments = Column(Text, nullable=False)
     submitted_at = Column(DateTime, default=datetime.utcnow)
+
+
+class LessonCompletion(Base):
+    """Tracks per-user lesson completion status for progress persistence."""
+
+    __tablename__ = "lesson_completions"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
+    user_id = Column(
+        UUID(as_uuid=False),
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+    lesson_id = Column(
+        UUID(as_uuid=False),
+        ForeignKey("lessons.id"),
+        nullable=False,
+        index=True,
+    )
+    best_score = Column(Float, nullable=False, default=0.0)
+    completed_at = Column(DateTime, default=datetime.utcnow)
+    __table_args__ = (
+        UniqueConstraint("user_id", "lesson_id", name="uq_user_lesson_completion"),
+    )

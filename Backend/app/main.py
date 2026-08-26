@@ -93,6 +93,9 @@ def _apply_schema_migrations():
                     conn.execute(sa_text("ALTER TABLE certificates ADD COLUMN lesson_id UUID"))
 
 
+    # lesson_completions table is created by create_all() below; no ALTER needed.
+
+
 _apply_schema_migrations()
 
 # Fail fast: abort startup before serving traffic if the production config is
@@ -124,6 +127,7 @@ from app.routers import auth, course, practice, trainer_router
 from app.routers import analytics, assessment, recommendation
 from app.routers.certificate import router as certificate_router
 from app.routers.report import router as report_router
+from app.routers.lesson_completion import router as lesson_completion_router
 
 
 app = FastAPI(
@@ -210,6 +214,7 @@ app.include_router(assessment.router)
 app.include_router(recommendation.router)
 app.include_router(certificate_router)
 app.include_router(report_router)
+app.include_router(lesson_completion_router)
 
 @app.get("/health", tags=["System Health & Status"], summary="Health Check", description="Confirm the backend is up and environment variables loaded.")
 def health_check():
