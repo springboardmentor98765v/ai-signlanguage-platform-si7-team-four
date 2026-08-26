@@ -121,3 +121,49 @@ def generate_certificate_pdf(
         )
 
     return pdf
+
+
+def generate_certificate_excel(
+    learner_name: str,
+    progress: LearnerProgress,
+    task_label: str | None = None,
+) -> bytes:
+    """Render the same certificate content as a real .xlsx workbook."""
+    result = check_certificate_eligibility(progress)
+
+    if not result["eligible"]:
+        raise CertificateNotEligibleError(result["message"])
+
+    try:
+        from openpyxl import Workbook
+    except ImportError as exc:  # pragma: no cover - dependency guard
+        raise RuntimeError("openpyxl is required for Excel certificate export.") from exc
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Certificate"
+
+    rows = [
+        ("Field", "Value"),
+        ("Certificate Title", "Certificate of Achievement"),
+        ("Platform", "AI Sign Language Platform"),
+        ("Presented To", learner_name),
+        (
+            "Task / Lesson",
+            task_label if task_label else "Full Curriculum Completion",
+        ),
+        ("Average Score", f"{progress.average_score:.2f}%"),
+        ("Issue Date", datetime.now().strftime("%d-%m-%Y")),
+        ("Verified By", "AI Assessor"),
+    ]
+    for row in rows:
+        ws.append(row)
+
+    ws.column_dimensions["A"].width = 22
+    ws.column_dimensions["B"].width = 45
+    for cell in ws[1]:
+        cell.font = cell.font.copy(bold=True)
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    return buffer.getvalue()

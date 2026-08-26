@@ -22,10 +22,11 @@ export default function Register() {
 
     try {
       const data = await registerUser(formData);
-      setMessage(data?.message || 'Account created successfully!');
+      setMessage(data.message || 'Account created successfully!');
+      // Registration is never auto-login: route the user to the login page.
       setTimeout(() => navigate('/login'), 1500);
     } catch (err) {
-      setError(err.message || 'Registration failed');
+      setError(err.message || 'Unable to reach the server. Please check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -100,6 +101,7 @@ export default function Register() {
           <input
             type="password"
             required
+            minLength={8}
             className="input-control"
             placeholder="••••••••"
             value={formData.password}

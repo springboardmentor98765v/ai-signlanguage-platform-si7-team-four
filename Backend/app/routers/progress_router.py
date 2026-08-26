@@ -1,75 +1,85 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List
 from datetime import datetime
 
 from app.db.database import get_db
-from app.models import models
+from app.models.models import AnalyticsSummary
+from app.services.analytics_service import get_learner_dashboard
 
 router = APIRouter(prefix="/api/v1/progress", tags=["Progress & Analytics"])
 
 class ProgressCreate(BaseModel):
-    user_id: int
-    course_id: int
+    user_id: str | int = Field(..., description="User whose progress is recorded.")
+    course_id: str | int | None = None
     completed_lessons: int = Field(..., ge=0)
     total_lessons: int = Field(..., ge=1)
     accuracy_score: float = Field(..., ge=0.0, le=100.0)
 
+
 class ProgressResponse(BaseModel):
-    id: int
-    user_id: int
-    course_id: int
+    id: str
+    user_id: str
+    course_id: str | None
     completed_lessons: int
     total_lessons: int
     accuracy_score: float
     last_updated: datetime
 
-    class Config:
-        orm_mode = True
 
 # 1. Fetch User Progress Statistics Endpoint
 @router.get("/user/{user_id}", response_model=List[ProgressResponse])
-def get_user_progress(user_id: int, db: Session = Depends(get_db)):
+def get_user_progress(user_id: str, db: Session = Depends(get_db)):
     """
-    Retrieves learning progress, course completion status, and accuracy metrics for a specific user.
+    Retrieves learning progress, course completion status, and accuracy metrics
+    for a specific user, computed live from persisted practice/assessment records.
     """
-    sample_progress = [
-        {
-            "id": 1,
-            "user_id": user_id,
-            "course_id": 101,
-            "completed_lessons": 8,
-            "total_lessons": 10,
-            "accuracy_score": 92.5,
-            "last_updated": datetime.now()
-        }
+    metrics = get_learner_dashboard(db, user_id)
+    return [
+        ProgressResponse(
+            id=str(user_id),
+            user_id=user_id,
+            course_id=None,
+            completed_lessons=metrics["lessons_completed"],
+            total_lessons=max(metrics["lessons_completed"], 1),
+            accuracy_score=float(metrics["overall_accuracy_percentage"] or 0.0),
+            last_updated=datetime.utcnow(),
+        )
     ]
-    return sample_progress
+
 
 # 2. Record or Update User Progress Endpoint
 @router.post("/update", response_model=ProgressResponse)
-def update_user_progress(progress: ProgressCreate):
+def update_user_progress(progress: ProgressCreate, db: Session = Depends(get_db)):
     """
     Records or updates user lesson completion and sign translation accuracy.
+    Upserts the learner's persisted AnalyticsSummary row.
     """
     if progress.accuracy_score < 0 or progress.accuracy_score > 100:
         raise HTTPException(status_code=400, detail="Accuracy score must be between 0 and 100.")
-        
-    metrics = completion_metrics(progress)
-    return {
-        "id": 42,
-        "user_id": progress.user_id,
-        "course_id": progress.course_id,
-        "completed_lessons": progress.completed_lessons,
-        "total_lessons": metrics["total_lessons"],
-        "accuracy_score": metrics["accuracy_score"],
-        "last_updated": metrics["last_updated"]
-    }
 
-def completion_metrics(progress: ProgressCreate):
-    return {
-        "total_lessons": progress.total_lessons,
-        "accuracy_score": progress.accuracy_score,
-        "last_updated": datetime.now()
-    }
+    user_id = str(progress.user_id)
+    summary = db.query(AnalyticsSummary).filter(AnalyticsSummary.user_id == user_id).first()
+    if summary is None:
+        summary = AnalyticsSummary(user_id=user_id)
+        summary.overall_accuracy_percentage = progress.accuracy_score
+        summary.improvement_rate_percentage = 0.0
+        summary.lessons_completed = progress.completed_lessons
+        db.add(summary)
+    else:
+        summary.overall_accuracy_percentage = progress.accuracy_score
+        summary.improvement_rate_percentage = summary.improvement_rate_percentage or 0.0
+        summary.lessons_completed = progress.completed_lessons
+    db.commit()
+    db.refresh(summary)
+
+    return ProgressResponse(
+        id=str(summary.id),
+        user_id=user_id,
+        course_id=str(progress.course_id) if progress.course_id is not None else None,
+        completed_lessons=progress.completed_lessons,
+        total_lessons=progress.total_lessons,
+        accuracy_score=progress.accuracy_score,
+        last_updated=datetime.utcnow(),
+    )

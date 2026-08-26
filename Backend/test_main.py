@@ -51,13 +51,16 @@ def test_course_seeding_and_retrieval_flow():
     response = client.get("/api/courses/modules")
     assert response.status_code == 200
     data = response.json()
-    
+
     # Assert that our automatic database seed initialized correctly
     assert len(data) > 0
     assert data[0]["module_id"]
     assert data[0]["title"] == "American Sign Language: Alphabets"
-    # Ensure all 26 default alphabet letters generated smoothly
-    assert len(data[0]["lessons"]) == 26
+    # All 26 default alphabet letters must be seeded (extra API-created lessons
+    # from other tests in the shared temp DB may also live in this module).
+    seeded_letters = {l["expected_gesture"] for l in data[0]["lessons"] if l.get("expected_gesture")}
+    assert all(chr(c) in seeded_letters for c in range(ord("A"), ord("Z") + 1))
+    assert len(data[0]["lessons"]) >= 26
 
 def test_unauthenticated_rbac_route_protection():
     """Verifies that unauthorized requests are blocked by the gateway architecture."""

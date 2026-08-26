@@ -25,10 +25,10 @@ from sqlalchemy import (
     Index,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from app.db.database import Base, PortableUUID
 from sqlalchemy.orm import relationship
 
-from app.db.database import Base
+UUID = PortableUUID
 
 
 def new_id():
@@ -256,6 +256,9 @@ class Certificate(Base):
     overall_score = Column(Float, nullable=False)
     pdf_url = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    # Task/lesson this certificate was earned from (nullable for legacy rows
+    # and for course-level certificates that are not tied to a single lesson).
+    lesson_id = Column(UUID(as_uuid=False), nullable=True)
 
     user = relationship("User", back_populates="certificates")
 
@@ -515,3 +518,63 @@ Index(
     "ix_streaks_current_streak_count",
     Streak.current_streak_count,
 )
+
+
+class TranslationHistory(Base):
+    """Persisted real-time gesture translation log entries."""
+
+    __tablename__ = "translation_history"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
+    user_id = Column(
+        UUID(as_uuid=False),
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+    translated_text = Column(Text, nullable=False)
+    confidence_level = Column(Float, nullable=False, default=0.0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Feedback(Base):
+    """Persisted community feedback / ratings."""
+
+    __tablename__ = "feedback"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
+    user_id = Column(
+        UUID(as_uuid=False),
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+    category = Column(String(50), nullable=False)
+    rating = Column(Integer, nullable=False)
+    comments = Column(Text, nullable=False)
+    submitted_at = Column(DateTime, default=datetime.utcnow)
+
+
+class LessonCompletion(Base):
+    """Tracks per-user lesson completion status for progress persistence."""
+
+    __tablename__ = "lesson_completions"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=new_id)
+    user_id = Column(
+        UUID(as_uuid=False),
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+    lesson_id = Column(
+        UUID(as_uuid=False),
+        ForeignKey("lessons.id"),
+        nullable=False,
+        index=True,
+    )
+    best_score = Column(Float, nullable=False, default=0.0)
+    completed_at = Column(DateTime, default=datetime.utcnow)
+    __table_args__ = (
+        UniqueConstraint("user_id", "lesson_id", name="uq_user_lesson_completion"),
+    )

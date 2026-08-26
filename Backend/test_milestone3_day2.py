@@ -16,6 +16,22 @@ from app.main import app
 
 client = TestClient(app)
 
+PASSWORD = "SecurePassword123!"
+
+
+def _new_user_id() -> str:
+    """Register a real user and return its UUID (notifications FK to users.id)."""
+    import uuid
+    payload = {
+        "username": f"notif_{uuid.uuid4().hex[:8]}",
+        "email": f"notif_{uuid.uuid4().hex[:10]}@example.com",
+        "password": PASSWORD,
+        "role": "Learner",
+    }
+    res = client.post("/api/auth/register", json=payload)
+    assert res.status_code == 201, res.text
+    return res.json()["user_id"]
+
 
 # ─────────────────────────────────────────────────────────
 # Helper – create a notification and return the response JSON
@@ -40,7 +56,7 @@ def test_checkpoint1_notifications_table_exists():
     Checkpoint 1: Notifications table exists and is accessible.
     Creating a record proves the table was created in the database.
     """
-    user_id = "table_test_user_01"
+    user_id = _new_user_id()
     res = _create_notification(user_id, "Table Existence Check", "If this works, the table exists.")
     assert res.status_code == 201, f"Expected 201, got {res.status_code}: {res.text}"
     data = res.json()
@@ -55,7 +71,7 @@ def test_checkpoint1_notifications_table_exists():
 
 def test_checkpoint2_create_notification_success():
     """Checkpoint 2: Create notification saves to DB with correct fields."""
-    user_id = "create_test_user_02"
+    user_id = _new_user_id()
     res = _create_notification(user_id, "Welcome!", "Your account is ready.")
     assert res.status_code == 201
     data = res.json()
@@ -70,7 +86,7 @@ def test_checkpoint2_create_notification_success():
 
 def test_checkpoint2_create_notification_all_types():
     """Checkpoint 2: Create notifications for all agreed event types."""
-    user_id = "types_test_user_02"
+    user_id = _new_user_id()
     for event_type in ["info", "badge_earned", "certificate_ready", "new_recommendation"]:
         res = client.post("/api/notifications", json={
             "user_id": user_id,
@@ -109,13 +125,13 @@ def test_checkpoint2_create_notification_empty_title_rejected():
 
 def test_checkpoint3_get_my_notifications_returns_correct_user():
     """Checkpoint 3: GET /{user_id} returns only the queried user's notifications."""
-    user_id = "get_test_user_03"
-    other_user_id = "other_user_03"
+    user_id = _new_user_id()
+    other_user_id = _new_user_id()
 
     # Create notifications for both users
-    _create_notification(user_id, "My Notification 1", "For get_test_user_03")
-    _create_notification(user_id, "My Notification 2", "For get_test_user_03")
-    _create_notification(other_user_id, "Other Notification", "For other_user_03")
+    _create_notification(user_id, "My Notification 1", "For get user")
+    _create_notification(user_id, "My Notification 2", "For get user")
+    _create_notification(other_user_id, "Other Notification", "For other user")
 
     res = client.get(f"/api/notifications/{user_id}")
     assert res.status_code == 200
@@ -132,7 +148,7 @@ def test_checkpoint3_get_my_notifications_returns_correct_user():
 
 def test_checkpoint3_get_my_notifications_newest_first():
     """Checkpoint 3: Notifications are returned newest first."""
-    user_id = "order_test_user_03"
+    user_id = _new_user_id()
     _create_notification(user_id, "Older", "First created")
     _create_notification(user_id, "Newer", "Second created")
 
@@ -155,7 +171,7 @@ def test_checkpoint3_get_my_notifications_empty_for_unknown_user():
 
 def test_checkpoint4_mark_as_read_success():
     """Checkpoint 4: Marking an unread notification updates is_read to True in DB."""
-    user_id = "markread_test_user_04"
+    user_id = _new_user_id()
     create_res = _create_notification(user_id, "Mark Me Read", "This should be marked.")
     assert create_res.status_code == 201
     notif_id = create_res.json()["id"]
@@ -178,7 +194,7 @@ def test_checkpoint4_mark_as_read_success():
 
 def test_checkpoint4_mark_as_read_idempotent():
     """Checkpoint 4: Marking an already-read notification is safe and returns success."""
-    user_id = "idempotent_user_04"
+    user_id = _new_user_id()
     create_res = _create_notification(user_id, "Already Read", "Already read notification.")
     notif_id = create_res.json()["id"]
 

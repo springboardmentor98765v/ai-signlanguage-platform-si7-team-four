@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field, field_validator
-from typing import Optional
+from typing import List, Optional
 
 from app.utils.validation import ALLOWED_ROLES, reject_malicious
 
@@ -45,6 +45,9 @@ class UserSummary(BaseModel):
     user_id: str
     username: str
     role: str
+    # Included so the Profile page can display the account address without a
+    # second request; blank only for exotic legacy tokens.
+    email: str = ""
 
 
 class RegisterResponse(BaseModel):
@@ -73,16 +76,36 @@ class RefreshTokenResponse(BaseModel):
     message: str
 
 
+class RecentActivity(BaseModel):
+    """One recent practice attempt rendered on the learner dashboard."""
+
+    id: str
+    sign: str
+    score: float
+    date: str
+
+
 class LearnerDashboardResponse(BaseModel):
-    """Response body for GET /api/auth/dashboard/learner."""
+    """Response body for GET /api/auth/dashboard/learner.
+
+    All values are computed live from the learner's persisted
+    practice/assessment records — there are no stub metrics.
+    """
 
     message: str
-    accuracy_metric_stub: str
-    lessons_completed_stub: int
+    learner_name: str = ""
+    accuracy_average: float = 0.0
+    completed_lessons: int = 0
+    # Legacy aliases kept for older clients/tests; mirror the values above.
+    accuracy_metric: float = 0.0
+    lessons_completed: int = 0
+    current_streak_days: int = 0
+    target_sign: str = "A"
+    recent_activities: List[RecentActivity] = []
 
 
 class InstructorDashboardResponse(BaseModel):
     """Response body for GET /api/auth/dashboard/instructor."""
 
     message: str
-    class_performance_average_stub: str
+    class_performance_average: float

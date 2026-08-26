@@ -48,6 +48,10 @@ def _apply_schema_migrations():
                     conn.execute("ALTER TABLE modules ADD COLUMN description TEXT")
                 if "created_at" not in module_cols:
                     conn.execute("ALTER TABLE modules ADD COLUMN created_at DATETIME")
+
+                cert_cols = {row[1] for row in conn.execute("PRAGMA table_info(certificates)")}
+                if "lesson_id" not in cert_cols:
+                    conn.execute("ALTER TABLE certificates ADD COLUMN lesson_id VARCHAR(36)")
         except Exception:
             pass
     else:
@@ -66,11 +70,30 @@ def _apply_schema_migrations():
                     with engine.begin() as conn:
                         conn.execute(sa_text(f"ALTER TABLE users ADD COLUMN {col} {ddl}"))
 
+            # Widen role so "Accessibility Trainer" (21 chars) fits. Older Neon
+            # databases created users.role as VARCHAR(20), which silently
+            # rejects that valid role on self-registration with a 500.
+            role_type = str(next(
+                (c["type"] for c in insp.get_columns("users") if c["name"] == "role"), ""
+            ))
+            if role_type == "VARCHAR(20)":
+                with engine.begin() as conn:
+                    conn.execute(sa_text("ALTER TABLE users ALTER COLUMN role TYPE VARCHAR(50)"))
+
         if insp.has_table("notifications"):
             notif_cols = {c["name"] for c in insp.get_columns("notifications")}
             if "title" not in notif_cols:
                 with engine.begin() as conn:
                     conn.execute(sa_text("ALTER TABLE notifications ADD COLUMN title VARCHAR(200) NOT NULL DEFAULT ''"))
+
+        if insp.has_table("certificates"):
+            cert_cols = {c["name"] for c in insp.get_columns("certificates")}
+            if "lesson_id" not in cert_cols:
+                with engine.begin() as conn:
+                    conn.execute(sa_text("ALTER TABLE certificates ADD COLUMN lesson_id UUID"))
+
+
+    # lesson_completions table is created by create_all() below; no ALTER needed.
 
 
 _apply_schema_migrations()
@@ -102,6 +125,9 @@ from app.routers.instructor_router import router as instructor_router
 from app.routers.notification_router import router as notification_router
 from app.routers import auth, course, practice, trainer_router
 from app.routers import analytics, assessment, recommendation
+from app.routers.certificate import router as certificate_router
+from app.routers.report import router as report_router
+from app.routers.lesson_completion import router as lesson_completion_router
 
 
 app = FastAPI(
@@ -186,6 +212,9 @@ app.include_router(trainer_router.router)
 app.include_router(analytics.router)
 app.include_router(assessment.router)
 app.include_router(recommendation.router)
+app.include_router(certificate_router)
+app.include_router(report_router)
+app.include_router(lesson_completion_router)
 
 @app.get("/health", tags=["System Health & Status"], summary="Health Check", description="Confirm the backend is up and environment variables loaded.")
 def health_check():
@@ -229,7 +258,15 @@ def health_check():
     except Exception as exc:
         deps["storage"] = f"unhealthy: {type(exc).__name__}: {exc}"
 
-    overall = "healthy" if set(deps.values()) == {"healthy"} else "degraded"
+    # Overall health reflects the CORE backend runtime deps (database + storage).
+    # The model_inference service is a separately deployed external dependency:
+    # its connectivity is reported for observability but does not downgrade the
+    # platform's own health flag (the frontend readiness probes rely on `status`).
+    core_ok = all(
+        deps.get(dep, "unhealthy") == "healthy"
+        for dep in ("database", "storage")
+    )
+    overall = "healthy" if core_ok else "degraded"
 
     return {
         "status": overall,

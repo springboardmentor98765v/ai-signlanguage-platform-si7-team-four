@@ -210,6 +210,27 @@ def submit_practice_frame(
                 # Refresh the learner's aggregate analytics row.
                 _refresh_analytics_summary(db, session.user_id)
 
+                # Auto-mark lesson as completed when score >= 80%.
+                if overall_accuracy is not None and overall_accuracy >= 80.0 and session.lesson_id:
+                    from app.models.models import LessonCompletion
+                    existing_completion = (
+                        db.query(LessonCompletion)
+                        .filter(
+                            LessonCompletion.user_id == session.user_id,
+                            LessonCompletion.lesson_id == str(session.lesson_id),
+                        )
+                        .first()
+                    )
+                    if existing_completion:
+                        if overall_accuracy > existing_completion.best_score:
+                            existing_completion.best_score = overall_accuracy
+                    else:
+                        db.add(LessonCompletion(
+                            user_id=session.user_id,
+                            lesson_id=str(session.lesson_id),
+                            best_score=overall_accuracy,
+                        ))
+
             notifications.create_notification(
                 db,
                 user_id=session.user_id if session is not None else (payload.user_id or "unknown"),
@@ -222,6 +243,17 @@ def submit_practice_frame(
                 event_type="info",
             )
             db.commit()
+
+        # Best-effort recommendation refresh after the attempt is safely
+        # persisted, so the learner dashboard reflects it immediately.
+        if session is not None and session.user_id:
+            try:
+                from app.services.recommendation_service import sync_user_recommendations
+
+                sync_user_recommendations(db, session.user_id)
+            except Exception as exc:
+                logger.warning("Could not refresh recommendations: %s", exc)
+                db.rollback()
 
         if session is not None:
             practice_service.increment_attempt(db, session_id)

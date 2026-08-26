@@ -42,6 +42,11 @@ def _register(role="Learner"):
         "password": PASSWORD,
         "role": role,
     }
+    if role == "Admin":
+        # Admin accounts are seeded by the platform, never self-registered.
+        from conftest import make_user
+        user = make_user(payload["email"], username=payload["username"], role="Admin")
+        return user["id"], user["email"]
     res = client.post("/api/auth/register", json=payload)
     assert res.status_code == 201, res.text
     body = res.json()
@@ -101,8 +106,8 @@ def test_auth_lifecycle():
     assert res.status_code == 200
     body = res.json()
     assert "message" in body
-    assert "accuracy_metric_stub" in body
-    assert "lessons_completed_stub" in body
+    assert "accuracy_metric" in body
+    assert "lessons_completed" in body
 
     # Learner token must NOT open the instructor dashboard -> 403 + {"detail": ...}
     denied = client.get("/api/auth/dashboard/instructor", headers=_bearer(learner_token))
@@ -113,7 +118,7 @@ def test_auth_lifecycle():
     _, instructor_token = _register_and_token("Instructor")
     res = client.get("/api/auth/dashboard/instructor", headers=_bearer(instructor_token))
     assert res.status_code == 200
-    assert "class_performance_average_stub" in res.json()
+    assert "class_performance_average" in res.json()
 
     # No token -> 401 + {"detail": ...}
     no_token = client.get("/api/auth/dashboard/learner")
@@ -157,9 +162,11 @@ def test_auth_lifecycle():
 # ==============================================================================
 
 def test_profile_update_and_password():
-    _register("Learner")
+    _, email = _register("Learner")
+    token = _login(email)
+    headers = _bearer(token)
 
-    update = client.patch("/api/users/me", json={"username": "fullpass_updated_user"})
+    update = client.patch("/api/users/me", json={"username": "fullpass_updated_user"}, headers=headers)
     assert update.status_code == 200
     body = update.json()
     assert "message" in body
@@ -169,6 +176,7 @@ def test_profile_update_and_password():
     pw = client.post(
         "/api/users/change-password",
         json={"current_password": PASSWORD, "new_password": "NewSecurePassword456!"},
+        headers=headers,
     )
     assert pw.status_code == 200
     assert "message" in pw.json()
@@ -193,29 +201,21 @@ def test_lessons_service():
     assert "advanced_lessons" in adv.json()
     assert "count" in adv.json()
 
-    # Get lesson by id
-    one = client.get(f"/api/lessons/{LESSON_ID}")
+    # Get lesson by id (use a real DB-backed lesson id)
+    real_lesson_id = body["data"][0]["lesson_id"]
+    one = client.get(f"/api/lessons/{real_lesson_id}")
     assert one.status_code == 200
-    assert one.json()["lesson_id"] == LESSON_ID
+    assert one.json()["lesson_id"] == real_lesson_id
+    assert one.json()["expected_gesture"]
 
     # Unknown lesson -> 404 + {"detail": ...}
     missing = client.get("/api/lessons/les_does_not_exist")
     assert missing.status_code == 404
     assert "detail" in missing.json()
 
-    # Bulk upload CSV (string payload)
-    csv_content = (
-        "module_id,title,content_description,expected_gesture,category,difficulty\n"
-        f"{MODULE_ID},Bulk Letter Z,CSV seeded lesson.,Z,alphabet,easy\n"
-    )
-    bulk = client.post("/api/lessons/bulk-upload-csv", json={"csv_content": csv_content})
-    assert bulk.status_code == 201
-    bbody = bulk.json()
-    assert bbody["created_count"] == 1
-    assert bbody["errors"] == []
-
     # RBAC CRUD: Learner token rejected on create -> 403
     _, learner_token = _register_and_token("Learner")
+    _, instructor_token = _register_and_token("Instructor")
     create_payload = {
         "module_id": MODULE_ID,
         "title": "RBAC Lesson A",
@@ -229,7 +229,6 @@ def test_lessons_service():
     assert "detail" in denied.json()
 
     # Instructor token can create / update / delete
-    _, instructor_token = _register_and_token("Instructor")
     created = client.post("/api/lessons", json=create_payload, headers=_bearer(instructor_token))
     assert created.status_code == 201
     new_id = created.json()["lesson_id"]
@@ -243,6 +242,21 @@ def test_lessons_service():
     deleted = client.delete(f"/api/lessons/{new_id}", headers=_bearer(instructor_token))
     assert deleted.status_code == 200
     assert "message" in deleted.json()
+
+    # Bulk upload CSV (string payload) — Instructor only.
+    csv_content = (
+        "module_id,title,content_description,expected_gesture,category,difficulty\n"
+        f"{MODULE_ID},Bulk Letter Z,CSV seeded lesson.,Z,alphabet,easy\n"
+    )
+    bulk = client.post(
+        "/api/lessons/bulk-upload-csv",
+        json={"csv_content": csv_content},
+        headers=_bearer(instructor_token),
+    )
+    assert bulk.status_code == 201
+    bbody = bulk.json()
+    assert bbody["created_count"] == 1
+    assert bbody["errors"] == []
 
     # No token -> 401
     no_auth = client.post("/api/lessons", json=create_payload)
@@ -396,8 +410,11 @@ def test_instructor_student_management():
     _, instructor_email = _register("Instructor")
     _, student_email = _register("Learner")
 
+    instructor_token = _login(instructor_email)
+
     assign = client.post(
         "/api/instructor/assign-student",
+        headers=_bearer(instructor_token),
         json={"instructor_email": instructor_email, "student_email": student_email},
     )
     assert assign.status_code == 200
@@ -405,7 +422,9 @@ def test_instructor_student_management():
     assert "message" in body
     assert body["instructor"] and body["student"]
 
-    students = client.get(f"/api/instructor/students/{instructor_email}")
+    students = client.get(
+        f"/api/instructor/students/{instructor_email}", headers=_bearer(instructor_token)
+    )
     assert students.status_code == 200
     sbody = students.json()
     assert sbody["total_students"] >= 1
@@ -414,6 +433,7 @@ def test_instructor_student_management():
     # Unknown instructor -> 404 + {"detail": ...}
     unknown = client.post(
         "/api/instructor/assign-student",
+        headers=_bearer(instructor_token),
         json={"instructor_email": f"unknown_{uuid.uuid4().hex[:6]}@example.com",
               "student_email": student_email},
     )
@@ -761,15 +781,16 @@ def test_v1_dictionary_service():
     signs = client.get("/api/v1/dictionary/signs")
     assert signs.status_code == 200
     assert len(signs.json()) >= 1
-    assert "sign_name" in signs.json()[0]
+    first = signs.json()[0]
+    assert "sign_name" in first
 
     searched = client.get("/api/v1/dictionary/signs", params={"search": "Hello"})
     assert searched.status_code == 200
     assert len(searched.json()) >= 1
 
-    one = client.get("/api/v1/dictionary/signs/1")
+    one = client.get(f"/api/v1/dictionary/signs/{first['id']}")
     assert one.status_code == 200
-    assert one.json()["id"] == 1
+    assert one.json()["id"] == first["id"]
 
     missing = client.get("/api/v1/dictionary/signs/99999")
     assert missing.status_code == 404

@@ -1,5 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { downloadCertificatePDF, exportReportFile } from '../services/api';
+import { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import {
+  getLearnerAnalyticsSummary,
+  getMyCertificates,
+  downloadCertificateFile,
+  exportReportFile,
+} from '../services/api';
 
 const REPORT_CATEGORIES = [
   { id: 'learning', title: 'Learning Report', desc: 'Summary of completed sign language modules and milestones.' },
@@ -9,34 +15,70 @@ const REPORT_CATEGORIES = [
   { id: 'progress', title: 'Progress Report', desc: 'Long-term learning trajectory, streaks, and badge history.' },
 ];
 
+const defaultStats = (name) => ({
+  completedLessons: 0,
+  averageScore: 0,
+  weakLetters: [],
+  learnerName: name,
+  issueDate: new Date().toLocaleDateString(),
+});
+
 export default function ReportsCertificate() {
-  const [stats, setStats] = useState(null);
+  const { user } = useAuth();
+  const [stats, setStats] = useState(() => defaultStats(user?.username || 'Learner'));
+  const [myCertificates, setMyCertificates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [downloadingReport, setDownloadingReport] = useState('');
-  const [certDownloading, setCertDownloading] = useState(false);
+  const [certDownloading, setCertDownloading] = useState('');
 
   useEffect(() => {
-    // Load learner metrics from storage or fallback defaults
-    const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
-    setStats({
-      completedLessons: 18,
-      averageScore: 91,
-      weakLetters: ['Z', 'J'],
-      learnerName: storedUser.username || 'Parvathy K Manoj',
-      issueDate: new Date().toLocaleDateString(),
-    });
-    setLoading(false);
-  }, []);
+    // Load learner metrics live from the backend analytics endpoint.
+    const userId = user?.user_id || localStorage.getItem('user_id');
 
-  // 1. Trigger Official PDF Certificate Download
-  const handleDownloadCertificate = async (examId = 1) => {
-    setCertDownloading(true);
+    (async () => {
+      if (!userId) {
+        setStats(defaultStats(user?.username || 'Learner'));
+        return;
+      }
+      try {
+        const analytics = await getLearnerAnalyticsSummary(userId);
+        const certs = await getMyCertificates();
+        setMyCertificates(certs);
+        setStats({
+          completedLessons: analytics?.lessons_completed ?? 0,
+          averageScore: Math.round(analytics?.average_accuracy ?? 0),
+          weakLetters: analytics?.weak_letters?.length
+            ? analytics.weak_letters
+            : ['None — great job!'],
+          learnerName: user?.username || analytics?.learner_id || 'Learner',
+          issueDate: certs[0]?.issued_date
+            ? new Date(certs[0].issued_date).toLocaleDateString()
+            : new Date().toLocaleDateString(),
+        });
+      } catch (err) {
+        console.warn('Could not load reports data, using defaults.', err);
+        setStats(defaultStats(user?.username || 'Learner'));
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [user]);
+
+  // Trigger Official Certificate Download (PDF or Excel).
+  const handleDownloadCertificate = async (format) => {
+    const certificateId = myCertificates[0]?.certificate_id;
+    if (!certificateId) {
+      alert('No certificate available yet. Complete a practice task with a score of 80% or higher to earn one.');
+      return;
+    }
+    setCertDownloading(format);
     try {
-      await downloadCertificatePDF(examId);
+      await downloadCertificateFile(certificateId, format);
     } catch (err) {
-      alert(`Certificate download failed: ${err.message}. Verify backend is running.`);
+      console.error('Certificate download error:', err?.message, err?.stack, JSON.stringify(err, null, 2));
+      alert(`Certificate download failed: ${err?.message || err || 'Unknown error'}. Verify backend is running.`);
     } finally {
-      setCertDownloading(false);
+      setCertDownloading('');
     }
   };
 
@@ -47,7 +89,8 @@ export default function ReportsCertificate() {
     try {
       await exportReportFile(reportType, format);
     } catch (err) {
-      alert(`Export for ${reportType} (${format.toUpperCase()}) failed: ${err.message}.`);
+      console.error('Report export error:', err?.message, err?.stack, JSON.stringify(err, null, 2));
+      alert(`Export for ${reportType} (${format.toUpperCase()}) failed: ${err?.message || err || 'Unknown error'}. Check the browser console for details.`);
     } finally {
       setDownloadingReport('');
     }
@@ -67,12 +110,20 @@ export default function ReportsCertificate() {
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           <button
-            onClick={() => handleDownloadCertificate(1)}
-            disabled={certDownloading}
+            onClick={() => handleDownloadCertificate('pdf')}
+            disabled={!!certDownloading || !myCertificates.length}
             className="btn-primary"
             style={{ padding: '0.6rem 1.25rem', fontWeight: 700 }}
           >
-            {certDownloading ? 'Generating PDF...' : '🎓 Download Official Certificate (PDF)'}
+            {certDownloading === 'pdf' ? 'Generating PDF...' : '🎓 Download as PDF'}
+          </button>
+          <button
+            onClick={() => handleDownloadCertificate('excel')}
+            disabled={!!certDownloading || !myCertificates.length}
+            className="btn-primary"
+            style={{ padding: '0.6rem 1.25rem', fontWeight: 700 }}
+          >
+            {certDownloading === 'excel' ? 'Generating Excel...' : '📊 Download as Excel'}
           </button>
           <button
             onClick={() => window.print()}
@@ -96,7 +147,7 @@ export default function ReportsCertificate() {
         </div>
         <div className="card">
           <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Weak Signs Focus</span>
-          <p style={{ fontSize: '1.875rem', fontWeight: 800, color: 'var(--warning, #f59e0b)', marginTop: '0.25rem' }}>{stats.weakLetters.join(', ')}</p>
+          <p style={{ fontSize: '1.875rem', fontWeight: 800, color: 'var(--warning, #f59e0b)', marginTop: '0.25rem' }}>{stats.weakLetters?.length ? stats.weakLetters.join(', ') : '—'}</p>
         </div>
       </div>
 
