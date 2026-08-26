@@ -90,18 +90,30 @@ export default function Practice() {
   }, [isTimerActive, timeLeft]);
 
   // --------------------------------------------------------------------------
+  // Camera Stream DOM Attachment Hook (Guarantees video binds on render)
+  // --------------------------------------------------------------------------
+  useEffect(() => {
+    if (isCameraOn && streamRef.current && videoRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.play().catch((err) => {
+        console.warn('Video auto-playback blocked:', err);
+      });
+    }
+  }, [isCameraOn]);
+
+  // --------------------------------------------------------------------------
   // Camera Initialization & Cleanup
   // --------------------------------------------------------------------------
   const startCamera = async () => {
     setCameraLoading(true);
     setErrorMsg('');
     try {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+      }
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { width: 640, height: 480, facingMode: 'user' } 
       });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
       streamRef.current = stream;
       setIsCameraOn(true);
       setTimeLeft(30);
@@ -118,6 +130,9 @@ export default function Practice() {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
     }
     setIsCameraOn(false);
     setIsTimerActive(false);
@@ -218,8 +233,7 @@ export default function Practice() {
       });
     };
 
-    // Try up to 3 fresh frames before giving up on hand detection —
-    // a single glance often catches the hand mid-move or out of focus.
+    // Try up to 3 fresh frames before giving up on hand detection
     for (let attempt = 0; attempt < 3; attempt++) {
       if (attempt > 0) await new Promise((r) => setTimeout(r, 400));
 
@@ -253,7 +267,6 @@ export default function Practice() {
         const handDetected = data.hand_detected !== false;
         const predicted = data.predicted_sign || null;
 
-        // Hand didn't register on this frame — retry with a fresher one.
         if (!handDetected || !predicted) continue;
 
         const confScore = typeof data.confidence === 'number'
@@ -299,7 +312,6 @@ export default function Practice() {
       }
     }
 
-    // Every frame came back without a detectable hand — be honest about it.
     setPrediction({
       predicted_sign: null,
       confidence: 0,
@@ -443,7 +455,7 @@ export default function Practice() {
                 autoPlay 
                 playsInline 
                 muted 
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }} 
               />
             ) : (
               <div style={{ textAlign: 'center', padding: '1.5rem', color: '#94a3b8' }}>
