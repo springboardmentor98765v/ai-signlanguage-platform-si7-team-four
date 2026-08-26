@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { changePassword } from '../services/api';
 
 export default function Profile() {
@@ -66,7 +66,14 @@ export default function Profile() {
           </div>
           <div>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Email Address</span>
-            <p style={{ fontWeight: 600, color: 'var(--text-main)', marginTop: '0.2rem' }}>{user.email}</p>
+            <p style={{ fontWeight: 600, color: 'var(--text-main)', marginTop: '0.2rem', wordBreak: 'break-all' }}>
+              {user.email || '—'}
+            </p>
+            {!user.email && (
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                Log out and sign in again to load your email.
+              </span>
+            )}
           </div>
           <div>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Assigned System Role</span>

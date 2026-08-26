@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getCourses, getCourseDetails } from '../services/api';
 
@@ -49,7 +49,8 @@ export default function Lessons() {
   }, []);
 
   const handleStartPractice = (lesson) => {
-    navigate(`/practice?lesson_id=${lesson.lesson_id}`);
+    const gesture = lesson.expected_gesture ? `&gesture=${encodeURIComponent(lesson.expected_gesture)}` : '';
+    navigate(`/practice?lesson_id=${lesson.lesson_id}${gesture}`);
   };
 
   const allLessons =
@@ -58,13 +59,18 @@ export default function Lessons() {
     ) || [];
 
   const filteredLessons = allLessons.filter((l) => {
+    const term = searchTerm.toLowerCase().trim();
     const matchesSearch =
-      l.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (l.description && l.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (l.expected_gesture && l.expected_gesture.toLowerCase().includes(searchTerm.toLowerCase()));
+      !term ||
+      l.title?.toLowerCase().includes(term) ||
+      l.module_name?.toLowerCase().includes(term) ||
+      (l.description && l.description.toLowerCase().includes(term)) ||
+      (l.expected_gesture && l.expected_gesture.toLowerCase().includes(term)) ||
+      (l.difficulty && l.difficulty.toLowerCase().includes(term));
 
     const matchesDifficulty =
-      selectedDifficulty === 'All' || (l.difficulty && l.difficulty === selectedDifficulty);
+      selectedDifficulty === 'All' ||
+      (l.difficulty && l.difficulty.toLowerCase() === selectedDifficulty.toLowerCase());
 
     return matchesSearch && matchesDifficulty;
   });

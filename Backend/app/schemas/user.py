@@ -45,6 +45,9 @@ class UserSummary(BaseModel):
     user_id: str
     username: str
     role: str
+    # Included so the Profile page can display the account address without a
+    # second request; blank only for exotic legacy tokens.
+    email: str = ""
 
 
 class RegisterResponse(BaseModel):

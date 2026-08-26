@@ -1,11 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { useState, useRef, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { API_BASE_URL, issueTaskCertificate, downloadCertificateFile } from '../services/api';
 
 // ============================================================================
 // Reusable Spring-Bounce Popup Modal Component
 // ============================================================================
-function PopupModal({ isOpen, onClose, title, message, badgeIcon = '🎉' }) {
+function PopupModal({ isOpen, onClose, title, message, badgeIcon = '🎉', actions = null }) {
   if (!isOpen) return null;
 
   return (
@@ -20,7 +20,8 @@ function PopupModal({ isOpen, onClose, title, message, badgeIcon = '🎉' }) {
         <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '1.5rem', lineHeight: '1.5' }}>
           {message}
         </p>
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          {actions}
           <button onClick={onClose} className="btn-primary" style={{ padding: '0.6rem 1.5rem', fontWeight: 700 }}>
             Awesome! Continue Practice
           </button>
@@ -34,9 +35,19 @@ function PopupModal({ isOpen, onClose, title, message, badgeIcon = '🎉' }) {
 // Main Interactive Practice View
 // ============================================================================
 export default function Practice() {
-  // Target Selection State
-  const [selectedCategory, setSelectedCategory] = useState('alphabets');
-  const [selectedLetter, setSelectedLetter] = useState('A');
+  // Deep link support: /practice?lesson_id=...&gesture=B preselects the target.
+  const [searchParams] = useSearchParams();
+  const deepGesture = (searchParams.get('gesture') || '').toString().toUpperCase();
+
+  // Target Selection State (initialised from an optional ?gesture= deep link)
+  const [selectedCategory, setSelectedCategory] = useState(
+    ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'].includes(deepGesture) ? 'numbers' : 'alphabets'
+  );
+  const [selectedLetter, setSelectedLetter] = useState(
+    /^[A-Z]$/.test(deepGesture) || ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'].includes(deepGesture)
+      ? deepGesture
+      : 'A'
+  );
   
   // Camera & Video Frame Capture State
   const [isCameraOn, setIsCameraOn] = useState(false);
@@ -58,6 +69,8 @@ export default function Practice() {
   const [prediction, setPrediction] = useState(null);
   const [showPopup, setShowPopup] = useState(false);
   const [modalData, setModalData] = useState({ title: '', message: '', icon: '🏆' });
+  const [taskCertId, setTaskCertId] = useState('');
+  const [certBusy, setCertBusy] = useState('');
 
   // Detailed Metric Breakdown State
   const [metrics, setMetrics] = useState({
@@ -96,23 +109,31 @@ export default function Practice() {
     setCameraLoading(true);
     setErrorMsg('');
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { width: 640, height: 480, facingMode: 'user' } 
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 640, height: 480, facingMode: 'user' }
       });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
+      // Store first; the effect below attaches it to the <video> element as
+      // soon as it mounts (it does not exist until isCameraOn becomes true).
       streamRef.current = stream;
       setIsCameraOn(true);
       setTimeLeft(30);
       setIsTimerActive(true);
-    } catch (err) {
+    } catch {
       setErrorMsg('Webcam access denied or camera not found. Enable the webcam to practice.');
       setIsCameraOn(false);
     } finally {
       setCameraLoading(false);
     }
   };
+
+  // Attach the live MediaStream to the preview <video> once both exist.
+  useEffect(() => {
+    const el = videoRef.current;
+    if (isCameraOn && el && streamRef.current && el.srcObject !== streamRef.current) {
+      el.srcObject = streamRef.current;
+      el.play?.().catch(() => { /* autoplay with muted video always allowed */ });
+    }
+  }, [isCameraOn]);
 
   const stopCamera = () => {
     if (streamRef.current) {
@@ -287,6 +308,14 @@ export default function Practice() {
             message: `Incredible precision! You matched Sign '${selectedLetter}' with ${confScore}% confidence.`,
             icon: '🏆'
           });
+          // Task completed above threshold — earn the certificate right away.
+          setTaskCertId('');
+          setCertBusy('');
+          issueTaskCertificate({ lessonId, score: confScore })
+            .then((cert) => {
+              if (cert?.certificate_id) setTaskCertId(cert.certificate_id);
+            })
+            .catch(() => { /* not eligible yet or backend unavailable */ });
           setShowPopup(true);
         }
         finish();
@@ -308,6 +337,18 @@ export default function Practice() {
     setMetrics({ handShape: 0, fingerPosition: 0, timingAlignment: 0 });
     setErrorMsg('No hand detected');
     finish();
+  };
+
+  const handleDownloadTaskCertificate = async (format) => {
+    if (!taskCertId) return;
+    setCertBusy(format);
+    try {
+      await downloadCertificateFile(taskCertId, format);
+    } catch (err) {
+      setErrorMsg(`Certificate download failed: ${err.message}`);
+    } finally {
+      setCertBusy('');
+    }
   };
 
   const resetSession = () => {
@@ -339,6 +380,26 @@ export default function Practice() {
         title={modalData.title}
         message={modalData.message}
         badgeIcon={modalData.icon}
+        actions={taskCertId ? (
+          <>
+            <button
+              onClick={() => handleDownloadTaskCertificate('pdf')}
+              disabled={!!certBusy}
+              className="btn-secondary"
+              style={{ padding: '0.6rem 1.25rem', fontWeight: 700 }}
+            >
+              {certBusy === 'pdf' ? 'Generating...' : '🎓 Download as PDF'}
+            </button>
+            <button
+              onClick={() => handleDownloadTaskCertificate('excel')}
+              disabled={!!certBusy}
+              className="btn-secondary"
+              style={{ padding: '0.6rem 1.25rem', fontWeight: 700 }}
+            >
+              {certBusy === 'excel' ? 'Generating...' : '📊 Download as Excel'}
+            </button>
+          </>
+        ) : null}
       />
 
       {/* Page Header Bar */}

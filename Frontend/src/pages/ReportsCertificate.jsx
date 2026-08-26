@@ -1,6 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getLearnerAnalyticsSummary, getMyCertificates, downloadCertificatePDF, exportReportFile } from '../services/api';
+import {
+  getLearnerAnalyticsSummary,
+  getMyCertificates,
+  downloadCertificateFile,
+  exportReportFile,
+} from '../services/api';
 
 const REPORT_CATEGORIES = [
   { id: 'learning', title: 'Learning Report', desc: 'Summary of completed sign language modules and milestones.' },
@@ -24,7 +29,7 @@ export default function ReportsCertificate() {
   const [myCertificates, setMyCertificates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [downloadingReport, setDownloadingReport] = useState('');
-  const [certDownloading, setCertDownloading] = useState(false);
+  const [certDownloading, setCertDownloading] = useState('');
 
   useEffect(() => {
     // Load learner metrics live from the backend analytics endpoint.
@@ -59,20 +64,20 @@ export default function ReportsCertificate() {
     })();
   }, [user]);
 
-  // 1. Trigger Official PDF Certificate Download
-  const handleDownloadCertificate = async () => {
+  // Trigger Official Certificate Download (PDF or Excel).
+  const handleDownloadCertificate = async (format) => {
     const certificateId = myCertificates[0]?.certificate_id;
     if (!certificateId) {
-      alert('No certificate available yet. Complete the required lessons to earn one.');
+      alert('No certificate available yet. Complete a practice task with a score of 80% or higher to earn one.');
       return;
     }
-    setCertDownloading(true);
+    setCertDownloading(format);
     try {
-      await downloadCertificatePDF(certificateId);
+      await downloadCertificateFile(certificateId, format);
     } catch (err) {
       alert(`Certificate download failed: ${err.message}. Verify backend is running.`);
     } finally {
-      setCertDownloading(false);
+      setCertDownloading('');
     }
   };
 
@@ -103,12 +108,20 @@ export default function ReportsCertificate() {
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           <button
-            onClick={handleDownloadCertificate}
-            disabled={certDownloading || !myCertificates.length}
+            onClick={() => handleDownloadCertificate('pdf')}
+            disabled={!!certDownloading || !myCertificates.length}
             className="btn-primary"
             style={{ padding: '0.6rem 1.25rem', fontWeight: 700 }}
           >
-            {certDownloading ? 'Generating PDF...' : '🎓 Download Official Certificate (PDF)'}
+            {certDownloading === 'pdf' ? 'Generating PDF...' : '🎓 Download as PDF'}
+          </button>
+          <button
+            onClick={() => handleDownloadCertificate('excel')}
+            disabled={!!certDownloading || !myCertificates.length}
+            className="btn-primary"
+            style={{ padding: '0.6rem 1.25rem', fontWeight: 700 }}
+          >
+            {certDownloading === 'excel' ? 'Generating Excel...' : '📊 Download as Excel'}
           </button>
           <button
             onClick={() => window.print()}

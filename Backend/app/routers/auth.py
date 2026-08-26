@@ -185,6 +185,7 @@ def login_user(
         "user": {
             "user_id": user_record["user_id"],
             "username": user_record["username"],
+            "email": user_record["email"],
             "role": user_record["role"]
         }
     }

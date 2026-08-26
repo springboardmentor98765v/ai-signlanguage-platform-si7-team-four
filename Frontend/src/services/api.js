@@ -240,11 +240,31 @@ export async function markNotificationRead(notificationId) {
 // 7) Certification & Reports Export APIs
 // -------------------------------------------------------------------
 
-export async function downloadCertificatePDF(certificateId) {
+/**
+ * Issues (or returns the already-issued) certificate for a completed task.
+ * Requires score >= the backend threshold; throws with the server's message
+ * otherwise.
+ */
+export async function issueTaskCertificate({ lessonId, score }) {
+  return await apiRequest('/api/certificates/issue', {
+    method: 'POST',
+    body: JSON.stringify({ lesson_id: lessonId || null, score }),
+  });
+}
+
+/**
+ * Downloads a certificate as 'pdf' or 'excel'. Returns true on success.
+ */
+export async function downloadCertificateFile(certificateId, format = 'pdf') {
+  const extension = format === 'excel' ? 'xlsx' : 'pdf';
   return await downloadFileStream(
-    `/api/certificates/${certificateId}/download`,
-    `Sign_Language_Certificate_${certificateId}.pdf`
+    `/api/certificates/${certificateId}/download?format=${format}`,
+    `Sign_Language_Certificate_${String(certificateId).slice(0, 8)}.${extension}`
   );
+}
+
+export async function downloadCertificatePDF(certificateId) {
+  return await downloadCertificateFile(certificateId, 'pdf');
 }
 
 export async function getMyCertificates() {
