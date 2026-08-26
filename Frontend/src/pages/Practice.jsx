@@ -149,11 +149,9 @@ function GestureReference({ letter, compact = false }) {
 // Main Interactive Practice View
 // ============================================================================
 export default function Practice() {
-  // Deep link support: /practice?lesson_id=...&gesture=B preselects the target.
   const [searchParams] = useSearchParams();
   const deepGesture = (searchParams.get('gesture') || '').toString().toUpperCase();
 
-  // Target Selection State (initialised from an optional ?gesture= deep link)
   const [selectedCategory, setSelectedCategory] = useState(
     ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'].includes(deepGesture) ? 'numbers' : 'alphabets'
   );
@@ -163,12 +161,10 @@ export default function Practice() {
       : 'A'
   );
   
-  // Camera & Video Frame Capture State
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [cameraLoading, setCameraLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   
-  // Interactive Session State
   const [attemptCount, setAttemptCount] = useState(1);
   const [maxAttempts] = useState(5);
   const [timeLeft, setTimeLeft] = useState(30);
@@ -178,7 +174,6 @@ export default function Practice() {
   const sessionIdRef = useRef('');
   const [lessonLookup, setLessonLookup] = useState({});
   
-  // AI Diagnostics State
   const [loading, setLoading] = useState(false);
   const [prediction, setPrediction] = useState(null);
   const [showPopup, setShowPopup] = useState(false);
@@ -187,7 +182,6 @@ export default function Practice() {
   const [certBusy, setCertBusy] = useState('');
   const [capturedFrame, setCapturedFrame] = useState(null);
 
-  // Detailed Metric Breakdown State
   const [metrics, setMetrics] = useState({
     handShape: 0,
     fingerPosition: 0,
@@ -201,9 +195,7 @@ export default function Practice() {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
   const numbers = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
 
-  // --------------------------------------------------------------------------
   // Countdown Timer Hook
-  // --------------------------------------------------------------------------
   useEffect(() => {
     let timer = null;
     if (isTimerActive && timeLeft > 0) {
@@ -217,39 +209,27 @@ export default function Practice() {
     return () => clearInterval(timer);
   }, [isTimerActive, timeLeft]);
 
-  // --------------------------------------------------------------------------
   // Camera Stream DOM Attachment Hook (Guarantees video binds on render)
-  // --------------------------------------------------------------------------
   useEffect(() => {
-    if (isCameraOn && streamRef.current && videoRef.current) {
-      videoRef.current.srcObject = streamRef.current;
-      videoRef.current.play().catch((err) => {
+    const el = videoRef.current;
+    if (isCameraOn && el && streamRef.current && el.srcObject !== streamRef.current) {
+      el.srcObject = streamRef.current;
+      el.play?.().catch((err) => {
         console.warn('Video auto-playback blocked:', err);
       });
     }
   }, [isCameraOn]);
 
-  // --------------------------------------------------------------------------
-  // Camera Initialization & Cleanup
-  // --------------------------------------------------------------------------
   const startCamera = async () => {
     setCameraLoading(true);
     setErrorMsg('');
     try {
- feature/frontend-day4-clean
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
       }
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { width: 640, height: 480, facingMode: 'user' } 
-      });
-
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 640, height: 480, facingMode: 'user' }
+        video: { width: 640, height: 480, facingMode: 'user' },
       });
-      // Store first; the effect below attaches it to the <video> element as
-      // soon as it mounts (it does not exist until isCameraOn becomes true).
- main
       streamRef.current = stream;
       setIsCameraOn(true);
       setTimeLeft(30);
@@ -261,15 +241,6 @@ export default function Practice() {
       setCameraLoading(false);
     }
   };
-
-  // Attach the live MediaStream to the preview <video> once both exist.
-  useEffect(() => {
-    const el = videoRef.current;
-    if (isCameraOn && el && streamRef.current && el.srcObject !== streamRef.current) {
-      el.srcObject = streamRef.current;
-      el.play?.().catch(() => { /* autoplay with muted video always allowed */ });
-    }
-  }, [isCameraOn]);
 
   const stopCamera = () => {
     if (streamRef.current) {
@@ -289,8 +260,6 @@ export default function Practice() {
     };
   }, []);
 
-  // Load the real lesson catalog once so practice attempts reference real
-  // lesson ids (persisted practice records stay linked to real lessons).
   useEffect(() => {
     fetch(`${API_BASE_URL}/api/courses/modules`, {
       headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}` },
@@ -307,12 +276,9 @@ export default function Practice() {
         }
         setLessonLookup(lookup);
       })
-      .catch(() => {/* lesson catalog unavailable; session runs without a lesson id */});
+      .catch(() => {});
   }, []);
 
-  // --------------------------------------------------------------------------
-  // Frame Processing & AI Prediction Call
-  // --------------------------------------------------------------------------
   const grabFrame = () => {
     if (!isCameraOn || !videoRef.current || !canvasRef.current) return null;
     const canvas = canvasRef.current;
@@ -330,7 +296,6 @@ export default function Practice() {
     setErrorMsg('');
     setCapturedFrame(null);
 
-    // Retrieve the authenticated user from LocalStorage.
     const storedUser = localStorage.getItem('user') || localStorage.getItem('user_info');
     const user = storedUser ? JSON.parse(storedUser) : null;
     const userId = user?.user_id || localStorage.getItem('user_id');
@@ -341,7 +306,6 @@ export default function Practice() {
       'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
     };
 
-    // Start a real practice session on the first attempt (if not already running).
     const startSession = async () => {
       if (sessionIdRef.current) return sessionIdRef.current;
       if (!userId) {
@@ -367,7 +331,7 @@ export default function Practice() {
           method: 'POST',
           headers: authHeaders,
         });
-      } catch { /* session end is best-effort */ }
+      } catch {}
     };
 
     const finish = () => {
@@ -379,7 +343,6 @@ export default function Practice() {
       });
     };
 
-    // Try up to 3 fresh frames before giving up on hand detection
     for (let attempt = 0; attempt < 3; attempt++) {
       if (attempt > 0) await new Promise((r) => setTimeout(r, 400));
 
@@ -445,16 +408,15 @@ export default function Practice() {
           setModalData({
             title: 'High Accuracy Achieved!',
             message: `Incredible precision! You matched Sign '${selectedLetter}' with ${confScore}% confidence.`,
-            icon: '🏆'
+            icon: '🏆',
           });
-          // Task completed above threshold — earn the certificate right away.
           setTaskCertId('');
           setCertBusy('');
           issueTaskCertificate({ lessonId, score: confScore })
             .then((cert) => {
               if (cert?.certificate_id) setTaskCertId(cert.certificate_id);
             })
-            .catch(() => { /* not eligible yet or backend unavailable */ });
+            .catch(() => {});
           setShowPopup(true);
         }
         finish();
@@ -649,7 +611,7 @@ export default function Practice() {
             justifyContent: 'center', 
             overflow: 'hidden', 
             marginBottom: '1rem',
-            border: '2px solid var(--border-color)'
+            border: '2px solid var(--border-color)',
           }}>
             {isCameraOn ? (
               <video 
