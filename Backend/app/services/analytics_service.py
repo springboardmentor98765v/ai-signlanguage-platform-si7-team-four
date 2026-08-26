@@ -440,7 +440,7 @@ def get_leaderboard(db, sort: str = "accuracy", user_id: str = None) -> list:
         board.append(
             {
                 "user_id": _u(summary.user_id),
-                "name": user.username,
+                "name": user.username or user.email or "Learner",
                 "accuracy": round(summary.overall_accuracy_percentage or 0.0, 1),
                 "streak": streak,
                 "is_user": user_id is not None and _u(summary.user_id) == _u(user_id),

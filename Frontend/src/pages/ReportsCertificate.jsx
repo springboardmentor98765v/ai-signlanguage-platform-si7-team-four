@@ -75,7 +75,8 @@ export default function ReportsCertificate() {
     try {
       await downloadCertificateFile(certificateId, format);
     } catch (err) {
-      alert(`Certificate download failed: ${err.message}. Verify backend is running.`);
+      console.error('Certificate download error:', err?.message, err?.stack, JSON.stringify(err, null, 2));
+      alert(`Certificate download failed: ${err?.message || err || 'Unknown error'}. Verify backend is running.`);
     } finally {
       setCertDownloading('');
     }
@@ -88,7 +89,8 @@ export default function ReportsCertificate() {
     try {
       await exportReportFile(reportType, format);
     } catch (err) {
-      alert(`Export for ${reportType} (${format.toUpperCase()}) failed: ${err.message}.`);
+      console.error('Report export error:', err?.message, err?.stack, JSON.stringify(err, null, 2));
+      alert(`Export for ${reportType} (${format.toUpperCase()}) failed: ${err?.message || err || 'Unknown error'}. Check the browser console for details.`);
     } finally {
       setDownloadingReport('');
     }

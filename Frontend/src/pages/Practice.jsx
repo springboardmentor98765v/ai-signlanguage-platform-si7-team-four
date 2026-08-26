@@ -71,6 +71,7 @@ export default function Practice() {
   const [modalData, setModalData] = useState({ title: '', message: '', icon: '🏆' });
   const [taskCertId, setTaskCertId] = useState('');
   const [certBusy, setCertBusy] = useState('');
+  const [capturedFrame, setCapturedFrame] = useState(null);
 
   // Detailed Metric Breakdown State
   const [metrics, setMetrics] = useState({
@@ -189,6 +190,7 @@ export default function Practice() {
     setLoading(true);
     setPrediction(null);
     setErrorMsg('');
+    setCapturedFrame(null);
 
     // Retrieve the authenticated user from LocalStorage.
     const storedUser = localStorage.getItem('user') || localStorage.getItem('user_info');
@@ -249,6 +251,7 @@ export default function Practice() {
         setErrorMsg('Camera is not ready. Turn the camera on first.');
         break;
       }
+      setCapturedFrame(base64Image);
 
       try {
         const currentSessionId = await startSession();
@@ -610,6 +613,20 @@ export default function Practice() {
           ) : (
             <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', border: '1px dashed var(--border-color)', borderRadius: 'var(--radius-md)' }}>
               Perform a sign gesture in front of the camera and click "Capture & Test Gesture".
+            </div>
+          )}
+
+          {/* Captured Frame Preview */}
+          {capturedFrame && (
+            <div style={{ marginTop: '1rem' }}>
+              <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
+                Captured Frame
+              </p>
+              <img
+                src={capturedFrame}
+                alt="Captured gesture frame"
+                style={{ width: '100%', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', objectFit: 'contain', maxHeight: '220px' }}
+              />
             </div>
           )}
         </div>

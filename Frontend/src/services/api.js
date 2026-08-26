@@ -59,7 +59,12 @@ export async function downloadFileStream(endpoint, defaultFilename) {
     const errorText = await response.text();
     let errorJson = {};
     try { errorJson = JSON.parse(errorText); } catch (_) {}
-    throw new Error(errorJson.detail || errorJson.message || `File stream failed with HTTP status ${response.status}`);
+    const detail = errorJson.detail || errorJson.message;
+    const errMsg = typeof detail === 'string' ? detail
+      : typeof detail === 'object' && detail !== null ? JSON.stringify(detail)
+      : `File stream failed with HTTP status ${response.status}`;
+    console.error('downloadFileStream error:', { status: response.status, errorText, errorJson });
+    throw new Error(errMsg);
   }
 
   const blob = await response.blob();
