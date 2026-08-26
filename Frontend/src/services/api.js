@@ -21,14 +21,50 @@ const getAuthHeaders = (extra = {}) => {
 };
 
 /**
+ * Exchange a stored refresh token for a fresh access token.
+ * Returns the new access_token string or null on failure.
+ */
+export async function refreshAccessToken() {
+  const refreshToken = localStorage.getItem('refresh_token');
+  if (!refreshToken) return null;
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/auth/refresh-token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.access_token) {
+      localStorage.setItem('access_token', data.access_token);
+      if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token);
+    }
+    return data.access_token || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Generic JSON fetcher for live backend endpoints. Throws on non-2xx.
+ * Auto-refreshes the access token on 401 once.
  */
 export async function apiRequest(endpoint, options = {}) {
   const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
-  const res = await fetch(url, {
+  let res = await fetch(url, {
     ...options,
     headers: getAuthHeaders(options.headers || {}),
   });
+
+  if (res.status === 401) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      res = await fetch(url, {
+        ...options,
+        headers: getAuthHeaders(options.headers || {}),
+      });
+    }
+  }
 
   if (!res.ok) {
     const errorText = await res.text();
@@ -46,14 +82,23 @@ export async function apiRequest(endpoint, options = {}) {
  */
 export async function downloadFileStream(endpoint, defaultFilename) {
   const fullUrl = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
-  const token = localStorage.getItem('access_token');
 
-  const response = await fetch(fullUrl, {
-    method: 'GET',
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  });
+  const makeRequest = async () => {
+    const token = localStorage.getItem('access_token');
+    return fetch(fullUrl, {
+      method: 'GET',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+  };
+
+  let response = await makeRequest();
+
+  if (response.status === 401) {
+    const newToken = await refreshAccessToken();
+    if (newToken) response = await makeRequest();
+  }
 
   if (!response.ok) {
     const errorText = await response.text();

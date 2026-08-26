@@ -36,6 +36,7 @@ export function AuthProvider({ children }) {
       }
 
       localStorage.setItem('access_token', data.access_token);
+      if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token);
       localStorage.setItem('user_id', userInfo.user_id);
       localStorage.setItem('username', userInfo.username);
       localStorage.setItem('user_role', userInfo.role);
@@ -60,6 +61,7 @@ export function AuthProvider({ children }) {
 
   const logout = () => {
     localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
     localStorage.removeItem('user_id');
     localStorage.removeItem('username');
     localStorage.removeItem('user_role');

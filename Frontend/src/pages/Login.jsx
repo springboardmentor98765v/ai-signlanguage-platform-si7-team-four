@@ -35,6 +35,7 @@ export default function Login({ setUser }) {
       }
 
       localStorage.setItem('access_token', data.access_token);
+      if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token);
       localStorage.setItem('user_info', JSON.stringify(currentUser));
       localStorage.setItem('user', JSON.stringify(currentUser));
       localStorage.setItem('user_id', currentUser.user_id || '');
