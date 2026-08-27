@@ -77,3 +77,46 @@ def assess(
         "is_correct": correct,
         "overall_accuracy": overall_accuracy,
     }
+
+def assess_dynamic(
+    predicted_sign: str,
+    expected_sign: str,
+    confidence: float,
+    distance: float | None = None,
+) -> dict:
+    """
+    Assess a dynamic sign using DTW-based prediction results.
+
+    Dynamic signs use multi-frame DTW matching, so they do not have
+    landmark-level hand shape, finger position, or timing scores.
+
+    Args:
+        predicted_sign: Sign predicted by the dynamic AI model.
+        expected_sign: Sign expected by the lesson.
+        confidence: DTW-based confidence returned by the AI service.
+        distance: DTW distance returned by the AI service.
+
+    Returns:
+        A dictionary containing the dynamic assessment result.
+    """
+    if not (0.0 <= confidence <= 1.0):
+        raise ValueError("Confidence must be between 0.0 and 1.0")
+
+    correct = is_match(
+        predicted_sign,
+        expected_sign,
+    )
+
+    overall_accuracy = round(
+        confidence * 100,
+        2,
+    )
+
+    return {
+        "predicted_sign": predicted_sign,
+        "expected_sign": expected_sign,
+        "confidence": confidence,
+        "distance": distance,
+        "is_correct": correct,
+        "overall_accuracy": overall_accuracy,
+    }

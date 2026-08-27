@@ -377,13 +377,24 @@ def submit_practice_frame_dynamic(
         logger.warning("AI service (predict_dynamic) returned malformed prediction: %s", exc)
         raise HTTPException(status_code=502, detail="AI service returned a malformed prediction response.")
 
-    # --- Determine correctness -----------------------------------------------
+    # --- Determine correctness using dynamic scoring -----------------------------------------------
     correct = None
+    overall_accuracy = None
+
     if matched and predicted_sign and payload.target_letter:
-        correct = str(predicted_sign).strip().lower() == str(payload.target_letter).strip().lower()
+        from app.services.assessment_service import assess_dynamic
+
+        dynamic_result = assess_dynamic(
+            predicted_sign=str(predicted_sign),
+            expected_sign=str(payload.target_letter),
+            confidence=confidence,
+            distance=distance,
+        )
+
+        correct = dynamic_result["is_correct"]
+        overall_accuracy = dynamic_result["overall_accuracy"]
 
     # --- Persist to Assessment (mirrors the static path) ---------------------
-    overall_accuracy = None
     updated_streak = None
     try:
         session = db.query(models.PracticeSession).filter(
@@ -391,24 +402,16 @@ def submit_practice_frame_dynamic(
         ).first()
 
         if matched and payload.target_letter and predicted_sign:
-            eff_conf = max(0.0, min(confidence, 1.0))
-            is_correct = bool(correct)
-
-            if is_correct:
-                overall_accuracy = round(eff_conf * 100.0, 1)
-            else:
-                overall_accuracy = round(max(0.0, 100.0 - eff_conf * 100.0), 1)
-
             db.add(models.Assessment(
                 session_id=session_id,
                 predicted_sign=str(predicted_sign)[:20],
                 expected_sign=str(payload.target_letter)[:20],
-                confidence=eff_conf,
-                hand_shape_score=overall_accuracy,
-                finger_position_score=overall_accuracy,
-                timing_score=overall_accuracy,
+                confidence=confidence,
+                hand_shape_score=None,
+                finger_position_score=None,
+                timing_score=None,
                 overall_accuracy=overall_accuracy,
-                is_correct=is_correct,
+                is_correct=correct,
                 suggestions=possible_issue,
             ))
 
