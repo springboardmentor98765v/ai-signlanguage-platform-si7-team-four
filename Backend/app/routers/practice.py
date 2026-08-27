@@ -9,7 +9,9 @@ from app.schemas.practice import (
     PracticeSessionResponse,
     PracticeEndResponse,
     PracticeSubmitResponse,
+    PracticeDynamicSubmitResponse,
     PracticeImageSubmissionRequest,
+    PracticeDynamicSubmissionRequest,
 )
 import uuid
 import logging
@@ -267,6 +269,236 @@ def submit_practice_frame(
         predicted_sign=predicted_sign,
         confidence=confidence,
         hand_detected=hand_detected,
+        correct=correct,
+        possible_issue=possible_issue,
+        overall_accuracy=overall_accuracy,
+        updated_streak=updated_streak,
+    )
+
+
+# -----------------------------------------------------------------------
+# Dynamic (multi-frame) submission — for J, Z, and word signs
+# -----------------------------------------------------------------------
+
+@router.post(
+    "/submit_dynamic",
+    response_model=PracticeDynamicSubmitResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Submit a Burst of Frames for Dynamic AI Feedback",
+    description=(
+        "Accepts a list of base64-encoded frames captured over a recording "
+        "burst, decodes each one, and forwards the entire list as multipart "
+        "files to the AI service at ``/predict_dynamic``. Used for dynamic "
+        "signs (J, Z, hello, no, please, thank_you, yes) where a single "
+        "image is insufficient."
+    ),
+)
+def submit_practice_frame_dynamic(
+    payload: PracticeDynamicSubmissionRequest,
+    db: Session = Depends(get_db),
+) -> PracticeDynamicSubmitResponse:
+    """Relay a burst of hand images to the AI dynamic prediction service.
+
+    Flow:
+        Browser -> list of base64 images -> /submit_dynamic -> decode each ->
+        multipart files -> ai-service:8001/predict_dynamic -> DTW matching ->
+        prediction -> relayed back + persisted.
+    """
+    import base64, re, httpx, os
+
+    # --- Resolve / validate session -------------------------------------------
+    session_id = payload.session_id
+    if session_id:
+        try:
+            session_uuid = uuid.UUID(session_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="session_id must be a valid UUID format.")
+        session = db.query(models.PracticeSession).filter(
+            models.PracticeSession.id == str(session_uuid)
+        ).first()
+        if not session:
+            raise HTTPException(status_code=404, detail="Active practice session context missing")
+    else:
+        if not payload.user_id or not payload.lesson_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Either session_id or both user_id and lesson_id are required.",
+            )
+        session_id = practice_service.start_session(
+            db, payload.user_id, payload.lesson_id
+        )["session_id"]
+
+    # --- Decode every frame --------------------------------------------------
+    decoded_frames: list[tuple[str, bytes, str]] = []
+    for idx, frame_data in enumerate(payload.frames):
+        m = re.match(r"data:image/.+;base64,(.*)", frame_data)
+        if not m:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Frame {idx}: invalid image_data format; must be base64 data URL.",
+            )
+        try:
+            frame_bytes = base64.b64decode(m.group(1))
+        except Exception:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Frame {idx}: failed to decode base64 image.",
+            )
+        decoded_frames.append((f"frame_{idx}.jpg", frame_bytes, "image/jpeg"))
+
+    # --- Forward to AI service /predict_dynamic ------------------------------
+    ai_url = os.getenv("AI_SERVICE_URL", "http://ai-service:8001").rstrip("/")
+    files = [("files", (name, data, ct)) for name, data, ct in decoded_frames]
+    data: dict = {}
+    if payload.target_letter:
+        data["target_sign"] = payload.target_letter
+
+    try:
+        ai_resp = httpx.post(f"{ai_url}/predict_dynamic", files=files, data=data, timeout=30.0)
+    except Exception as exc:
+        logger.warning("AI service (predict_dynamic) request failed: %s", exc)
+        raise HTTPException(status_code=502, detail="AI service is unreachable. Please try again shortly.")
+    if ai_resp.status_code != 200:
+        logger.warning("AI service returned %d: %s", ai_resp.status_code, ai_resp.text[:300])
+        raise HTTPException(status_code=502, detail="AI service returned an unexpected error.")
+
+    try:
+        ai = ai_resp.json()
+        if not isinstance(ai, dict):
+            raise ValueError("AI response is not a JSON object")
+        matched = bool(ai.get("matched", False))
+        predicted_sign = ai.get("predicted_sign")
+        confidence = float(ai.get("confidence") or 0.0)
+        distance = ai.get("distance")
+        hand_detected_frames = int(ai.get("hand_detected_frames") or 0)
+        total_frames = int(ai.get("total_frames") or len(decoded_frames))
+        possible_issue = ai.get("possible_issue")
+    except (ValueError, TypeError) as exc:
+        logger.warning("AI service (predict_dynamic) returned malformed prediction: %s", exc)
+        raise HTTPException(status_code=502, detail="AI service returned a malformed prediction response.")
+
+    # --- Determine correctness -----------------------------------------------
+    correct = None
+    if matched and predicted_sign and payload.target_letter:
+        correct = str(predicted_sign).strip().lower() == str(payload.target_letter).strip().lower()
+
+    # --- Persist to Assessment (mirrors the static path) ---------------------
+    overall_accuracy = None
+    updated_streak = None
+    try:
+        session = db.query(models.PracticeSession).filter(
+            models.PracticeSession.id == session_id
+        ).first()
+
+        if matched and payload.target_letter and predicted_sign:
+            eff_conf = max(0.0, min(confidence, 1.0))
+            is_correct = bool(correct)
+
+            if is_correct:
+                overall_accuracy = round(eff_conf * 100.0, 1)
+            else:
+                overall_accuracy = round(max(0.0, 100.0 - eff_conf * 100.0), 1)
+
+            db.add(models.Assessment(
+                session_id=session_id,
+                predicted_sign=str(predicted_sign)[:20],
+                expected_sign=str(payload.target_letter)[:20],
+                confidence=eff_conf,
+                hand_shape_score=overall_accuracy,
+                finger_position_score=overall_accuracy,
+                timing_score=overall_accuracy,
+                overall_accuracy=overall_accuracy,
+                is_correct=is_correct,
+                suggestions=possible_issue,
+            ))
+
+            if session is not None and session.user_id:
+                today = datetime.utcnow().date()
+                streak_row = db.query(models.Streak).filter(
+                    models.Streak.user_id == session.user_id
+                ).first()
+                if streak_row is None:
+                    streak_row = models.Streak(
+                        user_id=session.user_id,
+                        current_streak_count=1,
+                        longest_streak_count=1,
+                        last_practice_date=datetime.utcnow(),
+                    )
+                    db.add(streak_row)
+                else:
+                    last_date = streak_row.last_practice_date
+                    if last_date is None or last_date.date() != today:
+                        gap_days = (today - last_date.date()).days if last_date else 1
+                        streak_row.current_streak_count = (
+                            1 if gap_days > 1 else (streak_row.current_streak_count or 0) + 1
+                        )
+                        streak_row.longest_streak_count = max(
+                            streak_row.longest_streak_count or 0,
+                            streak_row.current_streak_count or 0,
+                        )
+                        streak_row.last_practice_date = datetime.utcnow()
+                db.flush()
+                updated_streak = streak_row.current_streak_count
+
+                _refresh_analytics_summary(db, session.user_id)
+
+                # Auto-mark lesson as completed when score >= 80%.
+                if overall_accuracy is not None and overall_accuracy >= 80.0 and session.lesson_id:
+                    from app.models.models import LessonCompletion
+                    existing_completion = (
+                        db.query(LessonCompletion)
+                        .filter(
+                            LessonCompletion.user_id == session.user_id,
+                            LessonCompletion.lesson_id == str(session.lesson_id),
+                        )
+                        .first()
+                    )
+                    if existing_completion:
+                        if overall_accuracy > existing_completion.best_score:
+                            existing_completion.best_score = overall_accuracy
+                    else:
+                        db.add(LessonCompletion(
+                            user_id=session.user_id,
+                            lesson_id=str(session.lesson_id),
+                            best_score=overall_accuracy,
+                        ))
+
+            notifications.create_notification(
+                db,
+                user_id=session.user_id if session is not None else (payload.user_id or "unknown"),
+                title="Dynamic practice attempt recorded",
+                message=(
+                    f"Signed '{payload.target_letter}' — score {overall_accuracy:.1f}%."
+                    if overall_accuracy is not None
+                    else "Dynamic practice attempt recorded."
+                ),
+                event_type="info",
+            )
+            db.commit()
+
+        if session is not None and session.user_id:
+            try:
+                from app.services.recommendation_service import sync_user_recommendations
+                sync_user_recommendations(db, session.user_id)
+            except Exception as exc:
+                logger.warning("Could not refresh recommendations: %s", exc)
+                db.rollback()
+
+        if session is not None:
+            practice_service.increment_attempt(db, session_id)
+    except Exception as exc:
+        logger.warning("Could not persist dynamic practice attempt: %s", exc)
+        db.rollback()
+
+    return PracticeDynamicSubmitResponse(
+        status="success",
+        session_id=session_id,
+        matched=matched,
+        predicted_sign=predicted_sign,
+        confidence=confidence,
+        distance=distance,
+        hand_detected_frames=hand_detected_frames,
+        total_frames=total_frames,
         correct=correct,
         possible_issue=possible_issue,
         overall_accuracy=overall_accuracy,

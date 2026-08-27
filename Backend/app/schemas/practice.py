@@ -26,6 +26,27 @@ class PracticeImageSubmissionRequest(BaseModel):
         return str(v) if isinstance(v, int) else v
 
 
+class PracticeDynamicSubmissionRequest(BaseModel):
+    """Request body for submitting multiple base64-encoded frames to the dynamic
+    AI service (``/predict_dynamic``).
+
+    Used for letter J, Z, and word signs (hello, no, please, thank_you, yes)
+    where the model needs a burst of frames over time, not a single image.
+    """
+    session_id: Optional[str] = Field(None, min_length=1, max_length=80)
+    user_id: Optional[str] = Field(None, min_length=1, max_length=80)
+    lesson_id: Optional[str] = Field(None, min_length=1, max_length=80)
+    target_letter: Optional[str] = Field(None, min_length=1, max_length=20,
+        description="Expected sign; forwarded as target_sign for comparison feedback")
+    frames: List[str] = Field(..., min_length=1,
+        description="List of base64 data URLs, e.g. ['data:image/jpeg;base64,...']")
+
+    @field_validator("user_id", "lesson_id", "session_id", mode="before")
+    @classmethod
+    def _coerce_optional_ids(cls, v):
+        return str(v) if isinstance(v, int) else v
+
+
 """
 Practice Service response schemas (shown in Swagger /docs).
 """
@@ -68,6 +89,27 @@ class PracticeSubmitResponse(BaseModel):
     predicted_sign: Optional[str] = None
     confidence: float = 0.0
     hand_detected: bool = False
+    correct: Optional[bool] = None
+    possible_issue: Optional[str] = None
+    overall_accuracy: Optional[float] = None
+    updated_streak: Optional[int] = None
+
+
+class PracticeDynamicSubmitResponse(BaseModel):
+    """Response body for POST /api/practice/submit_dynamic.
+
+    Fields mirror the ``/predict_dynamic`` AI service response: matched,
+    predicted_sign, confidence (DTW-based), distance, and frame counts.
+    """
+
+    status: str
+    session_id: str
+    matched: bool = False
+    predicted_sign: Optional[str] = None
+    confidence: float = 0.0
+    distance: Optional[float] = None
+    hand_detected_frames: int = 0
+    total_frames: int = 0
     correct: Optional[bool] = None
     possible_issue: Optional[str] = None
     overall_accuracy: Optional[float] = None
