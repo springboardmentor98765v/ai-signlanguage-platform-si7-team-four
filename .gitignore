@@ -46,3 +46,6 @@ mail_outbox/
 __pycache__/
 *.pyc
 mail_outbox
+
+# Local Netlify folder
+.netlify
