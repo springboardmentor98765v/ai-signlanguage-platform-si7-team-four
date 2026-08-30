@@ -7,8 +7,8 @@ headers = []
 
 [build]
 publish = "C:\\Users\\Dhanus\\Desktop\\sign-language-frontend\\Frontend\\dist"
-publishOrigin = "ui"
-commandOrigin = "ui"
+publishOrigin = "config"
+commandOrigin = "config"
 base = "C:\\Users\\Dhanus\\Desktop\\sign-language-frontend\\Frontend"
 command = "npm run build"
 

@@ -14,6 +14,47 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  // Bulletproof error message extractor to prevent [object Object]
+  const extractErrorMessage = (err) => {
+    if (!err) return 'Registration failed. Please try again.';
+    
+    // If it's a plain string
+    if (typeof err === 'string') return err;
+
+    // Check error message property
+    let candidate = err.message || err.detail || err.error;
+
+    if (candidate) {
+      if (typeof candidate === 'string') return candidate;
+      if (Array.isArray(candidate)) {
+        return candidate.map((d) => d.msg || d.message || JSON.stringify(d)).join(', ');
+      }
+      if (typeof candidate === 'object') {
+        // If candidate has a message inside it
+        if (candidate.message) return candidate.message;
+        if (candidate.detail) {
+          return typeof candidate.detail === 'string' ? candidate.detail : JSON.stringify(candidate.detail);
+        }
+        return JSON.stringify(candidate);
+      }
+    }
+
+    // Fallback if err.detail is an array directly on err
+    if (Array.isArray(err.detail)) {
+      return err.detail.map((d) => d.msg || JSON.stringify(d)).join(', ');
+    }
+
+    if (typeof err === 'object') {
+      try {
+        return JSON.stringify(err);
+      } catch {
+        return 'An unexpected error occurred during registration.';
+      }
+    }
+
+    return String(err);
+  };
+
   const handleRegister = async (e) => {
     e.preventDefault();
     setError('');
@@ -26,21 +67,14 @@ export default function Register() {
       // Registration is never auto-login: route the user to the login page.
       setTimeout(() => navigate('/login'), 1500);
     } catch (err) {
-      let errMsg = 'Unable to reach the server. Please check your connection and try again.';
-      if (typeof err === 'string') {
-        errMsg = err;
-      } else if (err?.message && typeof err.message === 'string') {
-        errMsg = err.message;
-      } else if (err?.detail) {
-        if (typeof err.detail === 'string') {
-          errMsg = err.detail;
-        } else if (Array.isArray(err.detail)) {
-          errMsg = err.detail.map((d) => d.msg || JSON.stringify(d)).join(', ');
-        } else if (typeof err.detail === 'object') {
-          errMsg = JSON.stringify(err.detail);
-        }
+      const parsedError = extractErrorMessage(err);
+      
+      // Friendly handling if public backend blocks admin creation
+      if (formData.role === 'Administrator' && parsedError.toLowerCase().includes('admin')) {
+        setError('Administrator accounts cannot be self-registered publicly. Please use standard administrative credentials or contact system support.');
+      } else {
+        setError(parsedError);
       }
-      setError(errMsg);
     } finally {
       setLoading(false);
     }
