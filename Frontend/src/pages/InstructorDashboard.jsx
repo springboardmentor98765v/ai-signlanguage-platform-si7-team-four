@@ -82,18 +82,26 @@ export default function InstructorDashboard() {
     e.preventDefault();
     setLessonFormMsg(null);
     try {
-      await createLesson({
-        module_id: lessonForm.module_id,
+      const payload = {
         title: lessonForm.title,
+        module_id: lessonForm.module_id.trim() || 'mod_general_01',
+        description: lessonForm.content_description || `Practice gesture for sign '${lessonForm.expected_gesture}'`,
         content_description: lessonForm.content_description,
-        expected_gesture: lessonForm.expected_gesture,
+        expected_gesture: (lessonForm.expected_gesture || '').toUpperCase(),
         category: lessonForm.category,
         difficulty: lessonForm.difficulty,
-      });
+      };
+
+      const newLesson = await createLesson(payload);
       setLessonFormMsg({ type: 'success', text: 'Lesson created successfully.' });
       setLessonForm(EMPTY_FORM);
       setShowLessonForm(false);
-      loadLessons();
+      
+      if (newLesson) {
+        setLessons((prev) => [newLesson, ...prev.filter((l) => (l.id || l.lesson_id) !== (newLesson.id || newLesson.lesson_id))]);
+      } else {
+        loadLessons();
+      }
     } catch (err) {
       setLessonFormMsg({ type: 'error', text: err.message || 'Failed to create lesson.' });
     }
@@ -185,21 +193,24 @@ export default function InstructorDashboard() {
                   const sid = s.student_id || s.id || idx;
                   const ps = s.progress_summary || {};
                   const isExpanded = expandedStudent === sid;
+                  const accuracy = s.accuracy ?? ps.average_accuracy ?? s.average_accuracy ?? '—';
+                  const completed = s.completedLessons ?? ps.lessons_completed ?? s.lessons_completed ?? 0;
+                  const status = ps.status || s.status || 'Active';
 
                   return (
                     <tr key={sid} style={{ background: isExpanded ? 'var(--table-header-bg, #f9fafb)' : undefined }}>
-                      <td style={{ fontWeight: 600 }}>{s.username || s.name || '—'}</td>
+                      <td style={{ fontWeight: 600 }}>{s.username || s.name || 'Learner'}</td>
                       <td style={{ color: 'var(--text-muted)' }}>{s.email}</td>
                       <td style={{ color: 'var(--primary)', fontWeight: 700 }}>
-                        {typeof ps.average_accuracy === 'number' ? `${ps.average_accuracy}%` : ps.average_accuracy || '—'}
+                        {typeof accuracy === 'number' ? `${accuracy}%` : accuracy}
                       </td>
-                      <td>{ps.lessons_completed ?? '—'}</td>
+                      <td>{completed}</td>
                       <td>
                         <span
-                          className={`badge ${ps.status === 'active' ? 'badge-success' : 'badge-primary'}`}
+                          className={`badge ${status.toLowerCase() === 'active' ? 'badge-success' : 'badge-primary'}`}
                           style={{ fontSize: '0.7rem', textTransform: 'capitalize' }}
                         >
-                          {ps.status || 'N/A'}
+                          {status}
                         </span>
                       </td>
                       <td>
@@ -218,9 +229,13 @@ export default function InstructorDashboard() {
             </table>
 
             {expandedStudent !== null && (() => {
-              const s = filteredStudents.find((s) => (s.student_id || s.id) === expandedStudent);
+              const s = filteredStudents.find((s, idx) => (s.student_id || s.id || idx) === expandedStudent);
               if (!s) return null;
               const ps = s.progress_summary || {};
+              const accuracy = s.accuracy ?? ps.average_accuracy ?? s.average_accuracy ?? '—';
+              const completed = s.completedLessons ?? ps.lessons_completed ?? s.lessons_completed ?? 0;
+              const status = ps.status || s.status || 'Active';
+
               return (
                 <div
                   style={{
@@ -231,7 +246,7 @@ export default function InstructorDashboard() {
                   }}
                 >
                   <h4 style={{ margin: '0 0 0.6rem', fontSize: '0.9rem', color: 'var(--text-main)' }}>
-                    {s.username || s.name} — Progress Summary
+                    {s.username || s.name || 'Learner'} — Progress Summary
                   </h4>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', fontSize: '0.85rem' }}>
                     <div className="card" style={{ padding: '0.75rem' }}>
@@ -240,24 +255,18 @@ export default function InstructorDashboard() {
                     </div>
                     <div className="card" style={{ padding: '0.75rem' }}>
                       <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '0.2rem' }}>Lessons Completed</div>
-                      <div style={{ fontWeight: 600, color: 'var(--primary)' }}>{ps.lessons_completed ?? '—'}</div>
+                      <div style={{ fontWeight: 600, color: 'var(--primary)' }}>{completed}</div>
                     </div>
                     <div className="card" style={{ padding: '0.75rem' }}>
                       <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '0.2rem' }}>Average Accuracy</div>
                       <div style={{ fontWeight: 600, color: 'var(--success, #22c55e)' }}>
-                        {typeof ps.average_accuracy === 'number' ? `${ps.average_accuracy}%` : ps.average_accuracy || '—'}
+                        {typeof accuracy === 'number' ? `${accuracy}%` : accuracy}
                       </div>
                     </div>
                     <div className="card" style={{ padding: '0.75rem' }}>
                       <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '0.2rem' }}>Status</div>
-                      <div style={{ fontWeight: 600, textTransform: 'capitalize' }}>{ps.status || 'N/A'}</div>
+                      <div style={{ fontWeight: 600, textTransform: 'capitalize' }}>{status}</div>
                     </div>
-                  </div>
-                  <div
-                    className="card"
-                    style={{ marginTop: '0.75rem', padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}
-                  >
-                    Detailed analytics coming soon.
                   </div>
                 </div>
               );
@@ -295,7 +304,7 @@ export default function InstructorDashboard() {
             <form onSubmit={handleCreateLesson}>
               <div style={formRowStyle}>
                 <div>
-                  <label style={labelStyle}>Title</label>
+                  <label style={labelStyle}>Title *</label>
                   <input
                     required
                     type="text"
@@ -306,25 +315,24 @@ export default function InstructorDashboard() {
                   />
                 </div>
                 <div>
-                  <label style={labelStyle}>Module ID (UUID)</label>
+                  <label style={labelStyle}>Module ID (Optional)</label>
                   <input
-                    required
                     type="text"
-                    placeholder="e.g. 550e8400-e29b..."
+                    placeholder="e.g. mod_general_01 (default applied if blank)"
                     value={lessonForm.module_id}
                     onChange={(e) => updateLessonField('module_id', e.target.value)}
                     style={inputStyle}
                   />
                 </div>
                 <div>
-                  <label style={labelStyle}>Expected Gesture (max 5 chars)</label>
+                  <label style={labelStyle}>Expected Gesture (max 5 chars) *</label>
                   <input
                     required
                     type="text"
                     maxLength={5}
                     placeholder="e.g. Q"
                     value={lessonForm.expected_gesture}
-                    onChange={(e) => updateLessonField('expected_gesture', e.target.value)}
+                    onChange={(e) => updateLessonField('expected_gesture', e.target.value.toUpperCase())}
                     style={inputStyle}
                   />
                 </div>
@@ -414,11 +422,11 @@ export default function InstructorDashboard() {
                 {lessons.map((l) => (
                   <tr key={l.id || l.lesson_id}>
                     <td style={{ fontWeight: 600 }}>{l.title}</td>
-                    <td><span className="badge badge-primary">{l.expected_gesture || l.target}</span></td>
+                    <td><span className="badge badge-primary">{l.expected_gesture || l.target || '—'}</span></td>
                     <td style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{l.category || '—'}</td>
-                    <td><span className="badge badge-success">{l.difficulty}</span></td>
+                    <td><span className="badge badge-success">{l.difficulty || 'Easy'}</span></td>
                     <td style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
-                      {l.module_id ? l.module_id.slice(0, 8) + '…' : '—'}
+                      {l.module_id ? (l.module_id.length > 10 ? l.module_id.slice(0, 8) + '…' : l.module_id) : '—'}
                     </td>
                     <td>
                       <button

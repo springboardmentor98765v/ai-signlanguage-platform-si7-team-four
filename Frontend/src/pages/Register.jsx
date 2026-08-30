@@ -26,7 +26,21 @@ export default function Register() {
       // Registration is never auto-login: route the user to the login page.
       setTimeout(() => navigate('/login'), 1500);
     } catch (err) {
-      setError(err.message || 'Unable to reach the server. Please check your connection and try again.');
+      let errMsg = 'Unable to reach the server. Please check your connection and try again.';
+      if (typeof err === 'string') {
+        errMsg = err;
+      } else if (err?.message && typeof err.message === 'string') {
+        errMsg = err.message;
+      } else if (err?.detail) {
+        if (typeof err.detail === 'string') {
+          errMsg = err.detail;
+        } else if (Array.isArray(err.detail)) {
+          errMsg = err.detail.map((d) => d.msg || JSON.stringify(d)).join(', ');
+        } else if (typeof err.detail === 'object') {
+          errMsg = JSON.stringify(err.detail);
+        }
+      }
+      setError(errMsg);
     } finally {
       setLoading(false);
     }

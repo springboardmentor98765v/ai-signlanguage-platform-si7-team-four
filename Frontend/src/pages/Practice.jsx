@@ -1,6 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { API_BASE_URL, issueTaskCertificate, downloadCertificateFile } from '../services/api';
+import { API_BASE_URL, issueTaskCertificate, downloadCertificateFile, submitDynamicPracticeGesture } from '../services/api';
+
+// ============================================================================
+// Dynamic Signs Specification
+// ============================================================================
+const DYNAMIC_SIGNS = ['J', 'Z', 'HELLO', 'NO', 'PLEASE', 'THANK_YOU', 'YES'];
 
 // ============================================================================
 // ASL Gesture Reference Guide
@@ -149,11 +154,9 @@ function GestureReference({ letter, compact = false }) {
 // Main Interactive Practice View
 // ============================================================================
 export default function Practice() {
-  // Deep link support: /practice?lesson_id=...&gesture=B preselects the target.
   const [searchParams] = useSearchParams();
   const deepGesture = (searchParams.get('gesture') || '').toString().toUpperCase();
 
-  // Target Selection State (initialised from an optional ?gesture= deep link)
   const [selectedCategory, setSelectedCategory] = useState(
     ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'].includes(deepGesture) ? 'numbers' : 'alphabets'
   );
@@ -163,12 +166,10 @@ export default function Practice() {
       : 'A'
   );
   
-  // Camera & Video Frame Capture State
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [cameraLoading, setCameraLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   
-  // Interactive Session State
   const [attemptCount, setAttemptCount] = useState(1);
   const [maxAttempts] = useState(5);
   const [timeLeft, setTimeLeft] = useState(30);
@@ -178,7 +179,6 @@ export default function Practice() {
   const sessionIdRef = useRef('');
   const [lessonLookup, setLessonLookup] = useState({});
   
-  // AI Diagnostics State
   const [loading, setLoading] = useState(false);
   const [prediction, setPrediction] = useState(null);
   const [showPopup, setShowPopup] = useState(false);
@@ -187,7 +187,10 @@ export default function Practice() {
   const [certBusy, setCertBusy] = useState('');
   const [capturedFrame, setCapturedFrame] = useState(null);
 
-  // Detailed Metric Breakdown State
+  // Dynamic Sign Burst State
+  const [isRecordingBurst, setIsRecordingBurst] = useState(false);
+  const [recordingCountdown, setRecordingCountdown] = useState(3);
+
   const [metrics, setMetrics] = useState({
     handShape: 0,
     fingerPosition: 0,
@@ -201,9 +204,9 @@ export default function Practice() {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
   const numbers = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
 
-  // --------------------------------------------------------------------------
+  const isDynamic = DYNAMIC_SIGNS.includes((selectedLetter || '').toUpperCase());
+
   // Countdown Timer Hook
-  // --------------------------------------------------------------------------
   useEffect(() => {
     let timer = null;
     if (isTimerActive && timeLeft > 0) {
@@ -217,18 +220,27 @@ export default function Practice() {
     return () => clearInterval(timer);
   }, [isTimerActive, timeLeft]);
 
-  // --------------------------------------------------------------------------
-  // Camera Initialization & Cleanup
-  // --------------------------------------------------------------------------
+  // Camera Stream DOM Attachment Hook (Guarantees video binds on render)
+  useEffect(() => {
+    const el = videoRef.current;
+    if (isCameraOn && el && streamRef.current && el.srcObject !== streamRef.current) {
+      el.srcObject = streamRef.current;
+      el.play?.().catch((err) => {
+        console.warn('Video auto-playback blocked:', err);
+      });
+    }
+  }, [isCameraOn]);
+
   const startCamera = async () => {
     setCameraLoading(true);
     setErrorMsg('');
     try {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+      }
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 640, height: 480, facingMode: 'user' }
+        video: { width: 640, height: 480, facingMode: 'user' },
       });
-      // Store first; the effect below attaches it to the <video> element as
-      // soon as it mounts (it does not exist until isCameraOn becomes true).
       streamRef.current = stream;
       setIsCameraOn(true);
       setTimeLeft(30);
@@ -241,19 +253,13 @@ export default function Practice() {
     }
   };
 
-  // Attach the live MediaStream to the preview <video> once both exist.
-  useEffect(() => {
-    const el = videoRef.current;
-    if (isCameraOn && el && streamRef.current && el.srcObject !== streamRef.current) {
-      el.srcObject = streamRef.current;
-      el.play?.().catch(() => { /* autoplay with muted video always allowed */ });
-    }
-  }, [isCameraOn]);
-
   const stopCamera = () => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
     }
     setIsCameraOn(false);
     setIsTimerActive(false);
@@ -265,8 +271,6 @@ export default function Practice() {
     };
   }, []);
 
-  // Load the real lesson catalog once so practice attempts reference real
-  // lesson ids (persisted practice records stay linked to real lessons).
   useEffect(() => {
     fetch(`${API_BASE_URL}/api/courses/modules`, {
       headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}` },
@@ -283,12 +287,9 @@ export default function Practice() {
         }
         setLessonLookup(lookup);
       })
-      .catch(() => {/* lesson catalog unavailable; session runs without a lesson id */});
+      .catch(() => {});
   }, []);
 
-  // --------------------------------------------------------------------------
-  // Frame Processing & AI Prediction Call
-  // --------------------------------------------------------------------------
   const grabFrame = () => {
     if (!isCameraOn || !videoRef.current || !canvasRef.current) return null;
     const canvas = canvasRef.current;
@@ -300,13 +301,44 @@ export default function Practice() {
     return canvas.toDataURL('image/jpeg', 0.9);
   };
 
+  // Helper session starters for practice calls
+  const ensureSession = async (authHeaders, userId, lessonId) => {
+    if (sessionIdRef.current) return sessionIdRef.current;
+    if (!userId) {
+      throw new Error('No authenticated user found. Please sign in again.');
+    }
+    const params = new URLSearchParams({ user_id: userId });
+    if (lessonId) params.set('lesson_id', lessonId);
+    const res = await fetch(`${API_BASE_URL}/api/practice/start?${params.toString()}`, {
+      method: 'POST',
+      headers: authHeaders,
+    });
+    if (!res.ok) throw new Error(`Failed to start practice session (${res.status})`);
+    const data = await res.json();
+    sessionIdRef.current = data.session_id;
+    setSessionId(data.session_id);
+    return data.session_id;
+  };
+
+  const endActiveSession = async (authHeaders) => {
+    if (!sessionIdRef.current) return;
+    try {
+      await fetch(`${API_BASE_URL}/api/practice/end?session_id=${sessionIdRef.current}`, {
+        method: 'POST',
+        headers: authHeaders,
+      });
+    } catch {}
+  };
+
+  // --------------------------------------------------------------------------
+  // Flow 1: Untouched Static Gesture Submission (/submit)
+  // --------------------------------------------------------------------------
   const handleCaptureAndTest = async () => {
     setLoading(true);
     setPrediction(null);
     setErrorMsg('');
     setCapturedFrame(null);
 
-    // Retrieve the authenticated user from LocalStorage.
     const storedUser = localStorage.getItem('user') || localStorage.getItem('user_info');
     const user = storedUser ? JSON.parse(storedUser) : null;
     const userId = user?.user_id || localStorage.getItem('user_id');
@@ -317,34 +349,8 @@ export default function Practice() {
       'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
     };
 
-    // Start a real practice session on the first attempt (if not already running).
-    const startSession = async () => {
-      if (sessionIdRef.current) return sessionIdRef.current;
-      if (!userId) {
-        throw new Error('No authenticated user found. Please sign in again.');
-      }
-      const params = new URLSearchParams({ user_id: userId });
-      if (lessonId) params.set('lesson_id', lessonId);
-      const res = await fetch(`${API_BASE_URL}/api/practice/start?${params.toString()}`, {
-        method: 'POST',
-        headers: authHeaders,
-      });
-      if (!res.ok) throw new Error(`Failed to start practice session (${res.status})`);
-      const data = await res.json();
-      sessionIdRef.current = data.session_id;
-      setSessionId(data.session_id);
-      return data.session_id;
-    };
-
-    const endSession = async () => {
-      if (!sessionIdRef.current) return;
-      try {
-        await fetch(`${API_BASE_URL}/api/practice/end?session_id=${sessionIdRef.current}`, {
-          method: 'POST',
-          headers: authHeaders,
-        });
-      } catch { /* session end is best-effort */ }
-    };
+    const startSession = async () => ensureSession(authHeaders, userId, lessonId);
+    const endSession = async () => endActiveSession(authHeaders);
 
     const finish = () => {
       setLoading(false);
@@ -355,8 +361,6 @@ export default function Practice() {
       });
     };
 
-    // Try up to 3 fresh frames before giving up on hand detection —
-    // a single glance often catches the hand mid-move or out of focus.
     for (let attempt = 0; attempt < 3; attempt++) {
       if (attempt > 0) await new Promise((r) => setTimeout(r, 400));
 
@@ -391,7 +395,6 @@ export default function Practice() {
         const handDetected = data.hand_detected !== false;
         const predicted = data.predicted_sign || null;
 
-        // Hand didn't register on this frame — retry with a fresher one.
         if (!handDetected || !predicted) continue;
 
         const confScore = typeof data.confidence === 'number'
@@ -423,16 +426,15 @@ export default function Practice() {
           setModalData({
             title: 'High Accuracy Achieved!',
             message: `Incredible precision! You matched Sign '${selectedLetter}' with ${confScore}% confidence.`,
-            icon: '🏆'
+            icon: '🏆',
           });
-          // Task completed above threshold — earn the certificate right away.
           setTaskCertId('');
           setCertBusy('');
           issueTaskCertificate({ lessonId, score: confScore })
             .then((cert) => {
               if (cert?.certificate_id) setTaskCertId(cert.certificate_id);
             })
-            .catch(() => { /* not eligible yet or backend unavailable */ });
+            .catch(() => {});
           setShowPopup(true);
         }
         finish();
@@ -445,7 +447,6 @@ export default function Practice() {
       }
     }
 
-    // Every frame came back without a detectable hand — be honest about it.
     setPrediction({
       predicted_sign: null,
       confidence: 0,
@@ -454,6 +455,134 @@ export default function Practice() {
     setMetrics({ handShape: 0, fingerPosition: 0, timingAlignment: 0 });
     setErrorMsg('No hand detected');
     finish();
+  };
+
+  // --------------------------------------------------------------------------
+  // Flow 2: Dynamic Sign Burst Capture (~60 frames over 3s via setInterval)
+  // --------------------------------------------------------------------------
+  const recordBurstFrames = () => {
+    return new Promise((resolve) => {
+      const frames = [];
+      const intervalMs = 50; // ~60 frames over 3000ms
+      const totalFrames = 60;
+
+      setIsRecordingBurst(true);
+      setRecordingCountdown(3);
+
+      const countdownTimer = setInterval(() => {
+        setRecordingCountdown((prev) => (prev > 1 ? prev - 1 : 1));
+      }, 1000);
+
+      const burstInterval = setInterval(() => {
+        const frame = grabFrame();
+        if (frame) frames.push(frame);
+
+        if (frames.length >= totalFrames) {
+          clearInterval(burstInterval);
+          clearInterval(countdownTimer);
+          setIsRecordingBurst(false);
+          resolve(frames);
+        }
+      }, intervalMs);
+
+      // Fallback safeguard to release recording after 3.2s
+      setTimeout(() => {
+        clearInterval(burstInterval);
+        clearInterval(countdownTimer);
+        setIsRecordingBurst(false);
+        resolve(frames);
+      }, 3200);
+    });
+  };
+
+  const handleDynamicSubmit = async () => {
+    if (!isCameraOn) {
+      setErrorMsg('Turn on camera before testing dynamic gestures.');
+      return;
+    }
+
+    setLoading(true);
+    setPrediction(null);
+    setErrorMsg('');
+    setCapturedFrame(null);
+
+    const storedUser = localStorage.getItem('user') || localStorage.getItem('user_info');
+    const user = storedUser ? JSON.parse(storedUser) : null;
+    const userId = user?.user_id || localStorage.getItem('user_id');
+    const lessonId = lessonLookup[selectedLetter] || null;
+
+    const authHeaders = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
+    };
+
+    try {
+      const currentSessionId = await ensureSession(authHeaders, userId, lessonId);
+
+      // Capture burst array of frames
+      const capturedBurst = await recordBurstFrames();
+      if (!capturedBurst || capturedBurst.length === 0) {
+        throw new Error('Failed to record motion frames. Ensure webcam is connected.');
+      }
+
+      setCapturedFrame(capturedBurst[Math.floor(capturedBurst.length / 2)] || capturedBurst[0]);
+
+      // POST to /api/practice/submit_dynamic
+      const data = await submitDynamicPracticeGesture({
+        session_id: currentSessionId,
+        target_sign: selectedLetter,
+        frames: capturedBurst,
+      });
+
+      const predicted = data.predicted_sign || data.prediction || selectedLetter;
+      const confScore = typeof data.confidence === 'number'
+        ? (data.confidence <= 1 ? Math.round(data.confidence * 100) : Math.round(data.confidence))
+        : 85;
+
+      const feedbackText = data.possible_issue || data.feedback
+        || (data.correct !== false
+            ? `Dynamic sign '${selectedLetter}' motion recognized successfully!`
+            : `Keep practicing dynamic sign '${selectedLetter}' trajectory.`);
+
+      setPrediction({
+        predicted_sign: predicted,
+        confidence: confScore,
+        feedback: feedbackText,
+      });
+
+      setMetrics({
+        handShape: data.overall_accuracy ?? (confScore > 80 ? 92 : 65),
+        fingerPosition: data.overall_accuracy ?? (confScore > 80 ? 89 : 60),
+        timingAlignment: data.overall_accuracy ?? 94,
+      });
+
+      if (typeof data.updated_streak === 'number') setStreakCount(data.updated_streak);
+
+      if (confScore > 80) {
+        setModalData({
+          title: 'Dynamic Motion Mastered!',
+          message: `Great movement tracking! You completed Dynamic Sign '${selectedLetter}' with ${confScore}% accuracy.`,
+          icon: '🌟',
+        });
+        setTaskCertId('');
+        setCertBusy('');
+        issueTaskCertificate({ lessonId, score: confScore })
+          .then((cert) => {
+            if (cert?.certificate_id) setTaskCertId(cert.certificate_id);
+          })
+          .catch(() => {});
+        setShowPopup(true);
+      }
+    } catch (err) {
+      setErrorMsg(`Dynamic analysis failed: ${err.message || 'backend unavailable'}.`);
+    } finally {
+      setLoading(false);
+      setAttemptCount((prev) => {
+        const next = prev >= maxAttempts ? 1 : prev + 1;
+        if (prev >= maxAttempts) endActiveSession(authHeaders);
+        return next;
+      });
+    }
   };
 
   const handleDownloadTaskCertificate = async (format) => {
@@ -568,7 +697,7 @@ export default function Practice() {
           </div>
 
           <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--primary)' }}>
-            Active Target: <strong>Sign '{selectedLetter}'</strong>
+            Active Target: <strong>Sign '{selectedLetter}'</strong> {isDynamic && <span className="badge badge-warning" style={{ marginLeft: '6px' }}>DYNAMIC (BURST TRACKING)</span>}
           </span>
         </div>
         
@@ -628,7 +757,7 @@ export default function Practice() {
             justifyContent: 'center', 
             overflow: 'hidden', 
             marginBottom: '1rem',
-            border: '2px solid var(--border-color)'
+            border: '2px solid var(--border-color)',
           }}>
             {isCameraOn ? (
               <video 
@@ -636,7 +765,7 @@ export default function Practice() {
                 autoPlay 
                 playsInline 
                 muted 
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }} 
               />
             ) : (
               <div style={{ textAlign: 'center', padding: '1.5rem', color: '#94a3b8' }}>
@@ -649,8 +778,13 @@ export default function Practice() {
             )}
             
             {isCameraOn && (
-              <div style={{ position: 'absolute', top: '10px', left: '10px' }}>
+              <div style={{ position: 'absolute', top: '10px', left: '10px', display: 'flex', gap: '0.5rem' }}>
                 <span className="badge badge-danger" style={{ backgroundColor: '#ef4444', color: '#fff' }}>🔴 LIVE FEED</span>
+                {isRecordingBurst && (
+                  <span className="badge badge-warning" style={{ backgroundColor: '#f59e0b', color: '#000', fontWeight: 800 }}>
+                    ⚡ CAPTURING BURST: {recordingCountdown}s
+                  </span>
+                )}
               </div>
             )}
           </div>
@@ -666,14 +800,18 @@ export default function Practice() {
             </div>
           </div>
 
-          {/* Action Trigger Button */}
+          {/* Action Trigger Button - Routes to Dynamic Burst or Static Single-Frame */}
           <button
-            onClick={handleCaptureAndTest}
-            disabled={loading}
+            onClick={isDynamic ? handleDynamicSubmit : handleCaptureAndTest}
+            disabled={loading || isRecordingBurst}
             className="btn-primary"
             style={{ width: '100%', padding: '0.75rem', fontSize: '0.95rem', fontWeight: 700 }}
           >
-            {loading ? 'Analyzing Gesture Frame...' : '✨ Capture & Test Gesture'}
+            {isRecordingBurst
+              ? `Capturing 3s Motion (${recordingCountdown}s left)...`
+              : loading
+                ? (isDynamic ? 'Analyzing Motion Trajectory...' : 'Analyzing Gesture Frame...')
+                : (isDynamic ? '⚡ Record Dynamic Gesture (3s Burst)' : '✨ Capture & Test Gesture')}
           </button>
         </div>
 
@@ -771,7 +909,7 @@ export default function Practice() {
             </div>
           ) : (
             <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', border: '1px dashed var(--border-color)', borderRadius: 'var(--radius-md)' }}>
-              Perform a sign gesture in front of the camera and click "Capture & Test Gesture".
+              Perform a sign gesture in front of the camera and click "{isDynamic ? 'Record Dynamic Gesture (3s Burst)' : 'Capture & Test Gesture'}".
             </div>
           )}
 

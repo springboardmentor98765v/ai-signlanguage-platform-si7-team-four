@@ -10,11 +10,12 @@ export default function Login({ setUser }) {
   const navigate = useNavigate();
 
   const routeByUserRole = (role) => {
-    if (role === 'Administrator' || role === 'Admin') {
+    const normalizedRole = (role || '').trim().toLowerCase();
+    if (normalizedRole === 'administrator' || normalizedRole === 'admin') {
       navigate('/admin');
-    } else if (role === 'Accessibility Trainer') {
+    } else if (normalizedRole === 'accessibility trainer' || normalizedRole === 'trainer') {
       navigate('/trainer-dashboard');
-    } else if (role === 'Instructor') {
+    } else if (normalizedRole === 'instructor') {
       navigate('/instructor');
     } else {
       navigate('/dashboard');
@@ -29,7 +30,7 @@ export default function Login({ setUser }) {
     try {
       const data = await loginUser({ email, password });
 
-      const currentUser = data.user;
+      const currentUser = data.user || data;
       if (!data.access_token || !currentUser) {
         throw new Error('Invalid login response from server.');
       }
@@ -38,13 +39,21 @@ export default function Login({ setUser }) {
       if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token);
       localStorage.setItem('user_info', JSON.stringify(currentUser));
       localStorage.setItem('user', JSON.stringify(currentUser));
-      localStorage.setItem('user_id', currentUser.user_id || '');
-      localStorage.setItem('username', currentUser.username || '');
+      localStorage.setItem('user_id', currentUser.user_id || currentUser.id || '');
+      localStorage.setItem('username', currentUser.username || currentUser.name || '');
       localStorage.setItem('user_role', currentUser.role || '');
       if (setUser) setUser(currentUser);
       routeByUserRole(currentUser.role);
     } catch (err) {
-      setError(err.message || 'Invalid credentials. Please try again.');
+      let errMsg = 'Invalid credentials. Please try again.';
+      if (typeof err === 'string') {
+        errMsg = err;
+      } else if (typeof err?.message === 'string') {
+        errMsg = err.message;
+      } else if (err?.detail) {
+        errMsg = typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail);
+      }
+      setError(errMsg);
     } finally {
       setLoading(false);
     }
