@@ -63,7 +63,15 @@ export async function apiRequest(endpoint, options = {}) {
     const errorText = await res.text();
     let errorJson = {};
     try { errorJson = JSON.parse(errorText); } catch (_) {}
-    throw new Error(errorJson.message || errorJson.detail || `Server returned status ${res.status}`);
+    
+    let errMsg = errorJson.message || errorJson.detail;
+    if (typeof errMsg === 'object' && errMsg !== null) {
+      errMsg = Array.isArray(errMsg)
+        ? errMsg.map((d) => d.msg || JSON.stringify(d)).join(', ')
+        : (errMsg.message || errMsg.detail || JSON.stringify(errMsg));
+    }
+    
+    throw new Error(errMsg || `Server returned status ${res.status}`);
   }
 
   if (res.status === 204) return null;
