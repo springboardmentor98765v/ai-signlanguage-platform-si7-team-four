@@ -289,6 +289,17 @@ export async function submitPracticeGesture({ userId, lessonId, sessionId, targe
   });
 }
 
+export async function submitDynamicPracticeGesture({ session_id, target_sign, frames }) {
+  return await apiRequest('/api/practice/submit_dynamic', {
+    method: 'POST',
+    body: JSON.stringify({
+      session_id,
+      target_sign,
+      frames,
+    }),
+  });
+}
+
 export async function evaluateSignDay3({ sign, image_base64 }) {
   return await apiRequest('/api/v1/day3/evaluate-sign', {
     method: 'POST',
